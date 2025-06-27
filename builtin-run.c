@@ -323,8 +323,8 @@ static const char *host_kernels[] = {
 
 static const char *default_kernels[] = {
 	"./bzImage",
-	"arch/" BUILD_ARCH "/boot/bzImage",
-	"../../arch/" BUILD_ARCH "/boot/bzImage",
+	"arch/" "x86" "/boot/bzImage",
+	"../../arch/" "x86" "/boot/bzImage",
 	NULL
 };
 

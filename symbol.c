@@ -1,3 +1,5 @@
+//go:build bfd
+
 #include "kvm/symbol.h"
 
 #include "kvm/kvm.h"

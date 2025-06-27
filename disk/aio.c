@@ -1,3 +1,5 @@
+//go:build libaio
+
 #include <libaio.h>
 #include <pthread.h>
 #include <sys/eventfd.h>

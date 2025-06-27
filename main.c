@@ -1,3 +1,5 @@
+//go:build main
+
 #include "kvm/kvm.h"
 
 #include <stdlib.h>

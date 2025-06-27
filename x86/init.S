@@ -1,3 +1,5 @@
+//go:build init
+
 .data
 
 .m_dev:

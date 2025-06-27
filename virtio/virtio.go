@@ -1,0 +1,8 @@
+package virtio
+
+/*
+#cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_GUEST_PRE_INIT -DCONFIG_X86_64 -DCONFIG_X86
+#cgo CFLAGS: -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
+#cgo CFLAGS: -I../include -I../x86/include
+*/
+import "C"
