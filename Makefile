@@ -601,3 +601,7 @@ ifneq ($(MAKECMDGOALS),clean)
 KVMTOOLS-VERSION-FILE:
 	@$(SHELL_PATH) util/KVMTOOLS-VERSION-GEN $(OUTPUT)
 endif
+
+go-build: export CGO_CFLAGS = -DKVMTOOLS_VERSION="$(KVMTOOLS_VERSION)" -DBUILD_ARCH="$(ARCH)"
+go-build: x86/bios/bios-rom.o guest/guest_init.o guest/guest_pre_init.o
+	go build

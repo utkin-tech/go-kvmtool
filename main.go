@@ -3,7 +3,7 @@ package main
 /*
 #cgo CFLAGS: -Iinclude -Ix86/include
 #cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_GUEST_PRE_INIT -DCONFIG_X86_64 -DCONFIG_X86
-#cgo CFLAGS: -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DBUILD_ARCH="x86"
+#cgo CFLAGS: -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
 #cgo LDFLAGS: x86/bios/bios-rom.o guest/guest_init.o guest/guest_pre_init.o
 #cgo LDFLAGS: -lz
 
@@ -35,10 +35,8 @@ import (
 )
 
 func main() {
-	// Установка директории KVM
 	C.set_kvm_dir()
 
-	// Получаем аргументы командной строки
 	argc := len(os.Args) - 1
 	argv := make([]*C.char, argc)
 
@@ -47,8 +45,12 @@ func main() {
 		defer C.free(unsafe.Pointer(argv[i]))
 	}
 
-	// Вызываем C-функцию обработки команд KVM
-	ret := C.handle_kvm_command(C.int(argc), &argv[0])
+	var argvPtr **C.char
+	if argc > 0 {
+		argvPtr = &argv[0]
+	}
+
+	ret := C.handle_kvm_command(C.int(argc), argvPtr)
 
 	os.Exit(int(ret))
 }
