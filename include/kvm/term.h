@@ -19,5 +19,6 @@ int term_getc(struct kvm *kvm, int term);
 
 bool term_readable(int term);
 int tty_parser(const struct option *opt, const char *arg, int unset);
+void term_set_fds(int term, int fd_in, int fd_out);
 
 #endif /* KVM__TERM_H */

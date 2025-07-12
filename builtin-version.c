@@ -7,6 +7,8 @@
 #include <string.h>
 #include <signal.h>
 
+#define KVMTOOLS_VERSION "0.0.0"
+
 int kvm_cmd_version(int argc, const char **argv, const char *prefix)
 {
 	printf("kvm tool %s\n", KVMTOOLS_VERSION);

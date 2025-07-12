@@ -10,10 +10,10 @@ package main
 #include "kvm/kvm.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <kvm/kvm-cmd.h>
+#include "kvm/builtin-run.h"
 
-static int handle_kvm_command(int argc, char **argv) {
-    return handle_command(kvm_commands, argc, (const char **) &argv[0]);
+static int handle_kvm_command(int argc, char **argv, int fd_in, int fd_out) {
+    return kvm_cmd_run(argc - 1, (const char **) &argv[1], NULL, fd_in, fd_out);
 }
 
 static void set_kvm_dir() {
@@ -22,9 +22,11 @@ static void set_kvm_dir() {
 */
 import "C"
 import (
+	"fmt"
 	"os"
 	"unsafe"
 
+	"github.com/utkin-tech/go-kvmtool/demo"
 	_ "github.com/utkin-tech/go-kvmtool/disk"
 	_ "github.com/utkin-tech/go-kvmtool/hw"
 	_ "github.com/utkin-tech/go-kvmtool/net/uip"
@@ -34,7 +36,18 @@ import (
 	_ "github.com/utkin-tech/go-kvmtool/x86"
 )
 
+const socketPath = "/tmp/example.sock"
+
 func main() {
+	socks, err := demo.CreateSockets()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer socks.Close()
+
+	go demo.RunServer(socketPath, socks.ParentToChildWriter, socks.ChildToParentReader)
+
 	C.set_kvm_dir()
 
 	argc := len(os.Args) - 1
@@ -50,7 +63,9 @@ func main() {
 		argvPtr = &argv[0]
 	}
 
-	ret := C.handle_kvm_command(C.int(argc), argvPtr)
+	fdIn := C.int(socks.ParentToChildReader.Fd())
+	fdOut := C.int(socks.ChildToParentWriter.Fd())
+	ret := C.handle_kvm_command(C.int(argc), argvPtr, fdIn, fdOut)
 
 	os.Exit(int(ret))
 }

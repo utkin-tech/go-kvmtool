@@ -159,6 +159,12 @@ static void term_set_tty(int term)
 	term_fds[term][TERM_FD_IN] = term_fds[term][TERM_FD_OUT] = master;
 }
 
+void term_set_fds(int term, int fd_in, int fd_out)
+{
+	term_fds[term][TERM_FD_IN] = fd_in;
+	term_fds[term][TERM_FD_OUT] = fd_out;
+}
+
 int tty_parser(const struct option *opt, const char *arg, int unset)
 {
 	int tty = atoi(arg);

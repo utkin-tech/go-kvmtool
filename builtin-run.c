@@ -3,7 +3,6 @@
 #include "kvm/builtin-setup.h"
 #include "kvm/virtio-balloon.h"
 #include "kvm/virtio-console.h"
-#include "kvm/parse-options.h"
 #include "kvm/8250-serial.h"
 #include "kvm/framebuffer.h"
 #include "kvm/disk-image.h"
@@ -320,6 +319,8 @@ static const char *host_kernels[] = {
 	"/boot/bzImage",
 	NULL
 };
+
+#define BUILD_ARCH "x86"
 
 static const char *default_kernels[] = {
 	"./bzImage",
@@ -656,7 +657,7 @@ static void kvm_run_validate_cfg(struct kvm *kvm)
 	kvm__arch_validate_cfg(kvm);
 }
 
-static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
+static struct kvm *kvm_cmd_run_init(int argc, const char **argv, int fd_in, int fd_out)
 {
 	static char default_name[20];
 	unsigned int nr_online_cpus;
@@ -719,6 +720,8 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv)
 	}
 
 	kvm_run_validate_cfg(kvm);
+
+	term_set_fds(0, fd_in, fd_out);
 
 	if (!kvm->cfg.kernel_filename && !kvm->cfg.firmware_filename) {
 		kvm->cfg.kernel_filename = find_kernel();
@@ -855,12 +858,12 @@ static void kvm_cmd_run_exit(struct kvm *kvm, int guest_ret)
 		pr_info("KVM session ended normally.");
 }
 
-int kvm_cmd_run(int argc, const char **argv, const char *prefix)
+int kvm_cmd_run(int argc, const char **argv, const char *prefix, int fd_in, int fd_out)
 {
 	int ret = -EFAULT;
 	struct kvm *kvm;
 
-	kvm = kvm_cmd_run_init(argc, argv);
+	kvm = kvm_cmd_run_init(argc, argv, fd_in, fd_out);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
 
