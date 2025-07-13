@@ -40,7 +40,6 @@
 #include <sys/utsname.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <termios.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
