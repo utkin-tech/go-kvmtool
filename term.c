@@ -22,31 +22,12 @@ static int term_fds[TERM_MAX_DEVS][2];
 
 static pthread_t term_poll_thread;
 
-/* ctrl-a is used for escape */
-#define term_escape_char 0x01
-
 int term_getc(struct kvm *kvm, int term)
 {
-	static bool term_got_escape = false;
 	unsigned char c;
 
 	if (read_in_full(term_fds[term][TERM_FD_IN], &c, 1) < 0)
 	{
-		return -1;
-	}
-
-	if (term_got_escape)
-	{
-		term_got_escape = false;
-		if (c == 'x')
-			kvm__reboot(kvm);
-		if (c == term_escape_char)
-			return c;
-	}
-
-	if (c == term_escape_char)
-	{
-		term_got_escape = true;
 		return -1;
 	}
 
