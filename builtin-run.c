@@ -68,216 +68,10 @@ enum {
 	KVM_RUN_SANDBOX,
 };
 
-static int img_name_parser(const struct option *opt, const char *arg, int unset)
-{
-	char path[PATH_MAX];
-	struct stat st;
-
-	snprintf(path, PATH_MAX, "%s%s", kvm__get_dir(), arg);
-
-	if ((stat(arg, &st) == 0 && S_ISDIR(st.st_mode)) ||
-	   (stat(path, &st) == 0 && S_ISDIR(st.st_mode)))
-		return virtio_9p_img_name_parser(opt, arg, unset);
-	return disk_img_name_parser(opt, arg, unset);
-}
-
 void kvm_run_set_wrapper_sandbox(void)
 {
 	kvm_run_wrapper = KVM_RUN_SANDBOX;
 }
-
-static int parse_mem_unit(char **next)
-{
-	switch (**next) {
-	case 'B': case 'b': (*next)++; return 0;
-	case 'K': case 'k': (*next)++; return KB_SHIFT;
-	case 'M': case 'm': (*next)++; return MB_SHIFT;
-	case 'G': case 'g': (*next)++; return GB_SHIFT;
-	case 'T': case 't': (*next)++; return TB_SHIFT;
-	case 'P': case 'p': (*next)++; return PB_SHIFT;
-	}
-
-	return MB_SHIFT;
-}
-
-static u64 parse_mem_option(const char *nptr, char **next)
-{
-	u64 shift;
-	u64 val;
-
-	errno = 0;
-	val = strtoull(nptr, next, 0);
-	if (errno == ERANGE)
-		die("Memory too large: %s", nptr);
-	if (*next == nptr)
-		die("Invalid memory specifier: %s", nptr);
-
-	shift = parse_mem_unit(next);
-	if ((val << shift) < val)
-		die("Memory too large: %s", nptr);
-
-	return val << shift;
-}
-
-static int mem_parser(const struct option *opt, const char *arg, int unset)
-{
-	struct kvm *kvm = opt->ptr;
-	char *next, *nptr;
-
-	kvm->cfg.ram_size = parse_mem_option(arg, &next);
-	if (kvm->cfg.ram_size == 0)
-		die("Invalid RAM size: %s", arg);
-
-	if (kvm__arch_has_cfg_ram_address() && *next == '@') {
-		next++;
-		if (*next == '\0')
-			die("Missing memory address: %s", arg);
-
-		nptr = next;
-		kvm->cfg.ram_addr = parse_mem_option(nptr, &next);
-	}
-
-	if (*next != '\0')
-		die("Invalid memory specifier: %s", arg);
-
-	return 0;
-}
-
-static int loglevel_parser(const struct option *opt, const char *arg, int unset)
-{
-	if (strcmp(opt->long_name, "debug") == 0) {
-		loglevel = LOGLEVEL_DEBUG;
-		return 0;
-	}
-
-	if (strcmp(arg, "debug") == 0)
-		loglevel = LOGLEVEL_DEBUG;
-	else if (strcmp(arg, "info") == 0)
-		loglevel = LOGLEVEL_INFO;
-	else if (strcmp(arg, "warning") == 0)
-		loglevel = LOGLEVEL_WARNING;
-	else if (strcmp(arg, "error") == 0)
-		loglevel = LOGLEVEL_ERROR;
-	else
-		die("Unknown loglevel: %s", arg);
-
-	return 0;
-}
-
-#ifndef OPT_ARCH_RUN
-#define OPT_ARCH_RUN(...)
-#endif
-
-#ifdef ARCH_HAS_CFG_RAM_ADDRESS
-#define MEM_OPT_HELP_SHORT	"size[BKMGTP][@addr[BKMGTP]]"
-#define MEM_OPT_HELP_LONG						\
-	"Virtual machine memory size and optional base address, both"	\
-	" measured by default in megabytes (M)"
-#else
-#define MEM_OPT_HELP_SHORT	"size[BKMGTP]"
-#define MEM_OPT_HELP_LONG						\
-	"Virtual machine memory size, by default measured in"		\
-	" in megabytes (M)"
-#endif
-
-#if defined(CONFIG_ARM64) || defined(CONFIG_RISCV)
-#define VIRTIO_TRANS_OPT_HELP_SHORT    "[pci|pci-legacy|mmio|mmio-legacy]"
-#else
-#define VIRTIO_TRANS_OPT_HELP_SHORT    "[pci|pci-legacy]"
-#endif
-
-#define BUILD_OPTIONS(name, cfg, kvm)					\
-	struct option name[] = {					\
-	OPT_GROUP("Basic options:"),					\
-	OPT_STRING('\0', "name", &(cfg)->guest_name, "guest name",	\
-			"A name for the guest"),			\
-	OPT_INTEGER('c', "cpus", &(cfg)->nrcpus, "Number of CPUs"),	\
-	OPT_CALLBACK('m', "mem", NULL, MEM_OPT_HELP_SHORT,		\
-		     MEM_OPT_HELP_LONG, mem_parser, kvm),		\
-	OPT_CALLBACK('d', "disk", kvm, "image or rootfs_dir", "Disk "	\
-			" image or rootfs directory", img_name_parser,	\
-			kvm),						\
-	OPT_BOOLEAN('\0', "balloon", &(cfg)->balloon, "Enable virtio"	\
-			" balloon"),					\
-	OPT_BOOLEAN('\0', "vnc", &(cfg)->vnc, "Enable VNC framebuffer"),\
-	OPT_BOOLEAN('\0', "gtk", &(cfg)->gtk, "Enable GTK framebuffer"),\
-	OPT_BOOLEAN('\0', "sdl", &(cfg)->sdl, "Enable SDL framebuffer"),\
-	OPT_BOOLEAN('\0', "rng", &(cfg)->virtio_rng, "Enable virtio"	\
-			" Random Number Generator"),			\
-	OPT_BOOLEAN('\0', "nodefaults", &(cfg)->nodefaults, "Disable"   \
-			" implicit configuration that cannot be"	\
-			" disabled otherwise"),				\
-	OPT_CALLBACK('\0', "9p", NULL, "dir_to_share,tag_name",		\
-		     "Enable virtio 9p to share files between host and"	\
-		     " guest", virtio_9p_rootdir_parser, kvm),		\
-	OPT_STRING('\0', "console", &(cfg)->console, "serial, virtio or"\
-			" hv", "Console to use"),			\
-	OPT_U64('\0', "vsock", &(cfg)->vsock_cid,			\
-			"Guest virtio socket CID"),			\
-	OPT_STRING('\0', "dev", &(cfg)->dev, "device_file",		\
-			"KVM device file"),				\
-	OPT_CALLBACK('\0', "tty", NULL, "tty id",			\
-		     "Remap guest TTY into a pty on the host",		\
-		     tty_parser, NULL),					\
-	OPT_STRING('\0', "sandbox", &(cfg)->sandbox, "script",		\
-			"Run this script when booting into custom"	\
-			" rootfs"),					\
-	OPT_STRING('\0', "hugetlbfs", &(cfg)->hugetlbfs_path, "path",	\
-			"Hugetlbfs path"),				\
-	OPT_CALLBACK_NOOPT('\0', "virtio-legacy",			\
-			   &(cfg)->virtio_transport, "",		\
-			   "Use legacy virtio transport (Deprecated:"	\
-			   " Use --virtio-transport option instead)",	\
-			   virtio_transport_parser, NULL),		\
-	OPT_CALLBACK('\0', "virtio-transport", &(cfg)->virtio_transport,\
-		     VIRTIO_TRANS_OPT_HELP_SHORT,		        \
-		     "Type of virtio transport",			\
-		     virtio_transport_parser, NULL),			\
-	OPT_CALLBACK('\0', "loglevel", NULL, "[error|warning|info|debug]",\
-			"Set the verbosity level", loglevel_parser, NULL),\
-									\
-	OPT_GROUP("Kernel options:"),					\
-	OPT_STRING('k', "kernel", &(cfg)->kernel_filename, "kernel",	\
-			"Kernel to boot in virtual machine"),		\
-	OPT_STRING('i', "initrd", &(cfg)->initrd_filename, "initrd",	\
-			"Initial RAM disk image"),			\
-	OPT_STRING('p', "params", &(cfg)->kernel_cmdline, "params",	\
-			"Kernel command line arguments"),		\
-	OPT_STRING('f', "firmware", &(cfg)->firmware_filename, "firmware",\
-			"Firmware image to boot in virtual machine"),	\
-	OPT_STRING('F', "flash", &(cfg)->flash_filename, "flash",\
-			"Flash image to present to virtual machine"),	\
-									\
-	OPT_GROUP("Networking options:"),				\
-	OPT_CALLBACK_DEFAULT('n', "network", NULL, "network params",	\
-		     "Create a new guest NIC. Pass mode=none to disable"\
-		     " all network devices",				\
-		     netdev_parser, NULL, kvm),				\
-	OPT_BOOLEAN('\0', "no-dhcp", &(cfg)->no_dhcp, "Disable kernel"	\
-			" DHCP in rootfs mode"),			\
-									\
-	OPT_GROUP("VFIO options:"),					\
-	OPT_CALLBACK('\0', "vfio-pci", NULL, "[domain:]bus:dev.fn",	\
-		     "Assign a PCI device to the virtual machine",	\
-		     vfio_device_parser, kvm),				\
-									\
-	OPT_GROUP("Debug options:"),					\
-	OPT_CALLBACK_NOOPT('\0', "debug", kvm, NULL,			\
-			"Enable debug messages (deprecated, use "	\
-			"--loglevel=debug instead)",			\
-			loglevel_parser, NULL),				\
-	OPT_BOOLEAN('\0', "debug-single-step", &(cfg)->single_step,	\
-			"Enable single stepping"),			\
-	OPT_BOOLEAN('\0', "debug-ioport", &(cfg)->ioport_debug,		\
-			"Enable ioport debugging"),			\
-	OPT_BOOLEAN('\0', "debug-mmio", &(cfg)->mmio_debug,		\
-			"Enable MMIO debugging"),			\
-	OPT_INTEGER('\0', "debug-iodelay", &(cfg)->debug_iodelay,	\
-			"Delay IO by millisecond"),			\
-									\
-	OPT_ARCH(RUN, cfg)						\
-	OPT_END()							\
-	};
 
 static void *kvm_cpu_thread(void *arg)
 {
@@ -465,14 +259,6 @@ static const char *find_vmlinux(void)
 	return NULL;
 }
 
-void kvm_run_help(void)
-{
-	struct kvm *kvm = NULL;
-
-	BUILD_OPTIONS(options, &kvm->cfg, kvm);
-	usage_with_options(run_usage, options);
-}
-
 static int kvm_run_set_sandbox(struct kvm *kvm)
 {
 	const char *guestfs_name = kvm->cfg.custom_rootfs_name;
@@ -656,7 +442,7 @@ static void kvm_run_validate_cfg(struct kvm *kvm)
 	kvm__arch_validate_cfg(kvm);
 }
 
-static struct kvm *kvm_cmd_run_init(int argc, const char **argv, int fd_in, int fd_out)
+static struct kvm *kvm_cmd_run_init(int fd_in, int fd_out, const char *kernel_filename)
 {
 	static char default_name[20];
 	unsigned int nr_online_cpus;
@@ -676,47 +462,7 @@ static struct kvm *kvm_cmd_run_init(int argc, const char **argv, int fd_in, int 
 	 */
 	kvm->cfg.ram_addr = kvm__arch_default_ram_address();
 
-	while (argc != 0) {
-		BUILD_OPTIONS(options, &kvm->cfg, kvm);
-		argc = parse_options(argc, argv, options, run_usage,
-				PARSE_OPT_STOP_AT_NON_OPTION |
-				PARSE_OPT_KEEP_DASHDASH);
-		if (argc != 0) {
-			/* Cusrom options, should have been handled elsewhere */
-			if (strcmp(argv[0], "--") == 0) {
-				if (kvm_run_wrapper == KVM_RUN_SANDBOX) {
-					kvm->cfg.sandbox = DEFAULT_SANDBOX_FILENAME;
-					kvm_run_write_sandbox_cmd(kvm, argv+1, argc-1);
-					break;
-				}
-			}
-
-			if ((kvm_run_wrapper == KVM_RUN_DEFAULT && kvm->cfg.kernel_filename) ||
-				(kvm_run_wrapper == KVM_RUN_SANDBOX && kvm->cfg.sandbox)) {
-				pr_err("Cannot handle parameter: %s", argv[0]);
-				usage_with_options(run_usage, options);
-				free(kvm);
-				return ERR_PTR(-EINVAL);
-			}
-			if (kvm_run_wrapper == KVM_RUN_SANDBOX) {
-				/*
-				 * first unhandled parameter is treated as
-				 * sandbox command
-				 */
-				kvm->cfg.sandbox = DEFAULT_SANDBOX_FILENAME;
-				kvm_run_write_sandbox_cmd(kvm, argv, argc);
-			} else {
-				/*
-				 * first unhandled parameter is treated as a kernel
-				 * image
-				 */
-				kvm->cfg.kernel_filename = argv[0];
-			}
-			argv++;
-			argc--;
-		}
-
-	}
+	kvm->cfg.kernel_filename = kernel_filename;
 
 	kvm_run_validate_cfg(kvm);
 
@@ -857,12 +603,12 @@ static void kvm_cmd_run_exit(struct kvm *kvm, int guest_ret)
 		pr_info("KVM session ended normally.");
 }
 
-int kvm_cmd_run(int argc, const char **argv, const char *prefix, int fd_in, int fd_out)
+int kvm_cmd_run(int fd_in, int fd_out, const char *kernel_filename)
 {
 	int ret = -EFAULT;
 	struct kvm *kvm;
 
-	kvm = kvm_cmd_run_init(argc, argv, fd_in, fd_out);
+	kvm = kvm_cmd_run_init(fd_in, fd_out, kernel_filename);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
 

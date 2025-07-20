@@ -12,8 +12,8 @@ package main
 #include <stdio.h>
 #include "kvm/builtin-run.h"
 
-static int handle_kvm_command(int argc, char **argv, int fd_in, int fd_out) {
-    return kvm_cmd_run(argc - 1, (const char **) &argv[1], NULL, fd_in, fd_out);
+static int handle_kvm_command(int fd_in, int fd_out, const char *kernel_filename) {
+    return kvm_cmd_run(fd_in, fd_out, kernel_filename);
 }
 
 static void set_kvm_dir() {
@@ -39,6 +39,8 @@ import (
 const socketPath = "/tmp/example.sock"
 
 func main() {
+	cfg := ParseConfig()
+
 	socks, err := demo.CreateSockets()
 	if err != nil {
 		fmt.Println(err)
@@ -50,22 +52,16 @@ func main() {
 
 	C.set_kvm_dir()
 
-	argc := len(os.Args) - 1
-	argv := make([]*C.char, argc)
-
-	for i, arg := range os.Args[1:] {
-		argv[i] = C.CString(arg)
-		defer C.free(unsafe.Pointer(argv[i]))
-	}
-
-	var argvPtr **C.char
-	if argc > 0 {
-		argvPtr = &argv[0]
-	}
-
 	fdIn := C.int(socks.ParentToChildReader.Fd())
 	fdOut := C.int(socks.ChildToParentWriter.Fd())
-	ret := C.handle_kvm_command(C.int(argc), argvPtr, fdIn, fdOut)
+
+	var kernelFilename *C.char
+	if len(cfg.kernelFilename) > 0 {
+		kernelFilename = C.CString(cfg.kernelFilename)
+	}
+	defer C.free(unsafe.Pointer(kernelFilename))
+
+	ret := C.handle_kvm_command(fdIn, fdOut, kernelFilename)
 
 	os.Exit(int(ret))
 }

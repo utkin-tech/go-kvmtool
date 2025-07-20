@@ -3,8 +3,7 @@
 
 #include <kvm/util.h>
 
-int kvm_cmd_run(int argc, const char **argv, const char *prefix, int fd_in, int fd_out);
-void kvm_run_help(void) NORETURN;
+int kvm_cmd_run(int fd_in, int fd_out, const char *kernel_filename);
 
 void kvm_run_set_wrapper_sandbox(void);
 
