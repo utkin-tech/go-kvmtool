@@ -146,10 +146,10 @@ static int extract_file(const char *guestfs_name, const char *filename,
 	return 0;
 }
 
-extern unsigned char init_binary[];
-extern unsigned long init_binary_size;
-extern unsigned char pre_init_binary[];
-extern unsigned long pre_init_binary_size;
+extern unsigned char* get_init_binary(void);
+extern unsigned long get_pre_init_binary_size(void);
+extern unsigned char* get_pre_init_binary(void);
+extern unsigned long get_init_binary_size(void);
 
 int kvm_setup_guest_init(const char *guestfs_name)
 {
@@ -157,12 +157,12 @@ int kvm_setup_guest_init(const char *guestfs_name)
 
 #ifdef CONFIG_GUEST_PRE_INIT
 	err = extract_file(guestfs_name, "virt/pre_init",
-			   pre_init_binary, pre_init_binary_size);
+			   get_pre_init_binary(), get_pre_init_binary_size());
 	if (err)
 		return err;
 #endif
 	err = extract_file(guestfs_name, "virt/init",
-			   init_binary, init_binary_size);
+			   get_init_binary(), get_init_binary_size());
 	return err;
 }
 #else

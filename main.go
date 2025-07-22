@@ -4,7 +4,7 @@ package main
 #cgo CFLAGS: -Iinclude -Ix86/include
 #cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_GUEST_PRE_INIT -DCONFIG_X86_64 -DCONFIG_X86
 #cgo CFLAGS: -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
-#cgo LDFLAGS: x86/bios/bios-rom.o guest/guest_init.o guest/guest_pre_init.o
+#cgo LDFLAGS: x86/bios/bios-rom.o
 #cgo LDFLAGS: -lz
 
 #include "kvm/kvm.h"
