@@ -36,6 +36,8 @@ static unsigned int gen_cpu_flag(unsigned int cpu, unsigned int ncpu)
 		((cpu == 0)   ? CPU_BOOTPROCESSOR : 0x00);
 }
 
+extern unsigned long bios_rom2_size(void);
+
 #define MPTABLE_SIG_FLOATING	"_MP_"
 #define MPTABLE_OEM		"KVMCPU00"
 #define MPTABLE_PRODUCTID	"0.1         "
@@ -91,7 +93,7 @@ int mptable__init(struct kvm *kvm)
 	void *last_addr;
 
 	/* That is where MP table will be in guest memory */
-	real_mpc_table = ALIGN(MB_BIOS_BEGIN + bios_rom_size, 16);
+	real_mpc_table = ALIGN(MB_BIOS_BEGIN + bios_rom2_size(), 16);
 
 	if (ncpus > MPTABLE_MAX_CPUS) {
 		pr_warning("Too many cpus: %d limited to %d",
@@ -254,7 +256,7 @@ int mptable__init(struct kvm *kvm)
 	 * in real it's late but still usefull.
 	 */
 
-	if (size > (unsigned long)(MB_BIOS_END - bios_rom_size) ||
+	if (size > (unsigned long)(MB_BIOS_END - bios_rom2_size()) ||
 	    size > MPTABLE_MAX_SIZE) {
 		free(mpc_table);
 		pr_err("MP table is too big");

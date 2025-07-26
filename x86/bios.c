@@ -15,8 +15,11 @@ struct irq_handler {
 	size_t			size;
 };
 
+extern unsigned char* bios_rom2_start(void);
+extern unsigned long bios_rom2_size(void);
+
 #define BIOS_IRQ_PA_ADDR(name)	(MB_BIOS_BEGIN + BIOS_OFFSET__##name)
-#define BIOS_IRQ_FUNC(name)	((char *)&bios_rom[BIOS_OFFSET__##name])
+#define BIOS_IRQ_FUNC(name)	((char *)&bios_rom2_start()[BIOS_OFFSET__##name])
 #define BIOS_IRQ_SIZE(name)	(BIOS_ENTRY_SIZE(BIOS_OFFSET__##name))
 
 #define DEFINE_BIOS_IRQ_HANDLER(_irq, _handler)			\
@@ -27,10 +30,7 @@ struct irq_handler {
 		.size		= BIOS_IRQ_SIZE(_handler),	\
 	}
 
-static struct irq_handler bios_irq_handlers[] = {
-	DEFINE_BIOS_IRQ_HANDLER(0x10, bios_int10),
-	DEFINE_BIOS_IRQ_HANDLER(0x15, bios_int15),
-};
+static struct irq_handler bios_irq_handlers[2];
 
 static void setup_irq_handler(struct kvm *kvm, struct irq_handler *handler)
 {
@@ -145,7 +145,7 @@ void setup_bios(struct kvm *kvm)
 
 	/* just copy the bios rom into the place */
 	p = guest_flat_to_host(kvm, MB_BIOS_BEGIN);
-	memcpy(p, bios_rom, bios_rom_size);
+	memcpy(p, bios_rom2_start(), bios_rom2_size());
 
 	/* E820 memory map must be present */
 	e820_setup(kvm);
@@ -163,6 +163,9 @@ void setup_bios(struct kvm *kvm)
 		.offset		= address - MB_BIOS_BEGIN,
 	};
 	interrupt_table__setup(&kvm->arch.interrupt_table, &intr_desc);
+
+	bios_irq_handlers[0] = (struct irq_handler)DEFINE_BIOS_IRQ_HANDLER(0x10, bios_int10);
+	bios_irq_handlers[1] = (struct irq_handler)DEFINE_BIOS_IRQ_HANDLER(0x15, bios_int15);
 
 	for (i = 0; i < ARRAY_SIZE(bios_irq_handlers); i++)
 		setup_irq_handler(kvm, &bios_irq_handlers[i]);
