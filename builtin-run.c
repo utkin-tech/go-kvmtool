@@ -442,7 +442,7 @@ static void kvm_run_validate_cfg(struct kvm *kvm)
 	kvm__arch_validate_cfg(kvm);
 }
 
-static struct kvm *kvm_cmd_run_init(int fd_in, int fd_out, const char *kernel_filename)
+static struct kvm *kvm_cmd_run_init(const char *kernel_filename)
 {
 	static char default_name[20];
 	unsigned int nr_online_cpus;
@@ -463,10 +463,9 @@ static struct kvm *kvm_cmd_run_init(int fd_in, int fd_out, const char *kernel_fi
 	kvm->cfg.ram_addr = kvm__arch_default_ram_address();
 
 	kvm->cfg.kernel_filename = kernel_filename;
+	kvm->cfg.console = "virtio";
 
 	kvm_run_validate_cfg(kvm);
-
-	term_set_fds(0, fd_in, fd_out);
 
 	if (!kvm->cfg.kernel_filename && !kvm->cfg.firmware_filename) {
 		kvm->cfg.kernel_filename = find_kernel();
@@ -603,12 +602,12 @@ static void kvm_cmd_run_exit(struct kvm *kvm, int guest_ret)
 		pr_info("KVM session ended normally.");
 }
 
-int kvm_cmd_run(int fd_in, int fd_out, const char *kernel_filename)
+int kvm_cmd_run(const char *kernel_filename)
 {
 	int ret = -EFAULT;
 	struct kvm *kvm;
 
-	kvm = kvm_cmd_run_init(fd_in, fd_out, kernel_filename);
+	kvm = kvm_cmd_run_init(kernel_filename);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
 

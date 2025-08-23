@@ -1,4 +1,4 @@
-package demo
+package server
 
 import (
 	"fmt"
