@@ -8,9 +8,22 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/utkin-tech/go-kvmtool/pkg/terminal"
+	"github.com/utkin-tech/go-kvmtool/virtio"
 )
 
-func RunServer(socketPath string, parentToChildWriter io.Writer, childToParentReader io.Reader) {
+const terminalNum = 2
+
+func RunServer() {
+	for i := 0; i < terminalNum; i++ {
+		socketPath := fmt.Sprintf("/tmp/gkvm/term%d", i)
+		term := virtio.Terminals[i]
+		go addSocket(socketPath, term)
+	}
+}
+
+func addSocket(socketPath string, term *terminal.Terminal) {
 	if err := os.RemoveAll(socketPath); err != nil {
 		log.Fatal(err)
 	}
@@ -36,6 +49,9 @@ func RunServer(socketPath string, parentToChildWriter io.Writer, childToParentRe
 	}()
 
 	fmt.Println("Unix domain socket server listening on", socketPath)
+
+	parentToChildWriter := term.HostToGuest
+	childToParentReader := term.GuestToHost
 
 	for {
 		conn, err := listener.Accept()

@@ -5,33 +5,48 @@ package virtio
 */
 import "C"
 import (
-	"fmt"
 	"unsafe"
 
 	"github.com/utkin-tech/go-kvmtool/pkg/ringbuffer"
+	"github.com/utkin-tech/go-kvmtool/pkg/terminal"
 )
 
-var HostToGuest = ringbuffer.NewRingBuffer[byte](1<<16, HostToGuestFunc)
-var GuestToHost = ringbuffer.NewRingBuffer[byte](1<<10, nil)
+const terminalNum = 2
 
-func HostToGuestFunc() {
-	C.virtio_console__inject_interrupt(nil)
+var Terminals []*terminal.Terminal
+
+func HostToGuestFunc(term int) func() {
+	if term != 0 {
+		term = (term + 1) << 1
+	}
+
+	return func() {
+		C.virtio_console__inject_interrupt_vq(nil, C.int(term))
+	}
+}
+
+func init() {
+	Terminals = make([]*terminal.Terminal, terminalNum)
+	for i := 0; i < terminalNum; i++ {
+		Terminals[i] = &terminal.Terminal{
+			HostToGuest: ringbuffer.NewRingBuffer[byte](1<<16, HostToGuestFunc(i)),
+			GuestToHost: ringbuffer.NewRingBuffer[byte](1<<10, nil),
+		}
+	}
 }
 
 //export g_ringbuffer_write
-func g_ringbuffer_write(base unsafe.Pointer, len C.int) C.int {
+func g_ringbuffer_write(base unsafe.Pointer, len C.int, term C.int) C.int {
 	buffer := C.GoBytes(base, len)
 	for _, b := range buffer {
-		GuestToHost.Push(b)
+		Terminals[term].GuestToHost.Push(b)
 	}
 	return len
 }
 
 //export g_term_getc
 func g_term_getc(term C.int) C.int {
-	fmt.Println("g_term_getc")
-
-	b, ok := HostToGuest.TryPop()
+	b, ok := Terminals[term].HostToGuest.TryPop()
 	if !ok {
 		return -1
 	}
@@ -40,5 +55,5 @@ func g_term_getc(term C.int) C.int {
 
 //export g_term_readable
 func g_term_readable(term C.int) bool {
-	return !HostToGuest.IsEmpty()
+	return !Terminals[term].HostToGuest.IsEmpty()
 }

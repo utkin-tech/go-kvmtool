@@ -2,7 +2,6 @@ package ringbuffer
 
 import (
 	"errors"
-	"io"
 	"sync"
 )
 
@@ -141,36 +140,4 @@ func (rb *RingBuffer[T]) Clear() {
 	rb.head = 0
 	rb.tail = 0
 	rb.size = 0
-}
-
-var _ io.Writer = (*RingBuffer[byte])(nil)
-
-func (rb *RingBuffer[byte]) Write(p []byte) (n int, err error) {
-	for _, b := range p {
-		rb.Push(b)
-		n++
-	}
-	return n, nil
-}
-
-var _ io.Reader = (*RingBuffer[byte])(nil)
-
-func (rb *RingBuffer[byte]) Read(p []byte) (n int, err error) {
-	if rb.IsEmpty() {
-		return 0, nil
-	}
-
-	for i := range p {
-		b, ok := rb.TryPop()
-		if !ok {
-			if n == 0 {
-				return 0, nil
-			}
-			return n, nil
-		}
-		p[i] = b
-		n++
-	}
-
-	return n, nil
 }

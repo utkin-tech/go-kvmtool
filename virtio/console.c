@@ -22,7 +22,7 @@
 #include "kvm/virtio.h"
 
 #define VIRTIO_CONSOLE_QUEUE_SIZE 128
-#define VIRTIO_CONSOLE_NUM_QUEUES 4
+#define VIRTIO_CONSOLE_NUM_QUEUES 16
 #define VIRTIO_CONSOLE_RX_QUEUE 0
 #define VIRTIO_CONSOLE_TX_QUEUE 1
 #define VIRTIO_CONSOLE_RX_QUEUE2 2
@@ -49,6 +49,15 @@ static int compat_id = -1;
 int g_term_putc_iov(struct iovec *iov, int iovcnt, int term);
 int g_term_getc_iov(struct kvm *kvm, struct iovec *iov, int iovcnt, int term);
 
+int vqToTerm(struct virt_queue *vq) {
+    int vq_num = vq - cdev.vqs;
+    int term = vq_num >> 1;
+    if (term != 0) {
+        --term;
+    }
+    return term;
+}
+
 /*
  * Interrupts are injected for hvc0 only.
  */
@@ -62,10 +71,11 @@ static void virtio_console__inject_interrupt_callback(struct kvm *kvm, void *par
     mutex_lock(&cdev.mutex);
 
     vq = param;
+    int term = vqToTerm(vq);
 
-    if (g_term_readable(0) && virt_queue__available(vq)) {
+    if (g_term_readable(term) && virt_queue__available(vq)) {
         head = virt_queue__get_iov(vq, iov, &out, &in, kvm);
-        len = g_term_getc_iov(kvm, iov, in, 0);
+        len = g_term_getc_iov(kvm, iov, in, term);
         virt_queue__set_used_elem(vq, head, len);
         cdev.vdev.ops->signal_vq(kvm, &cdev.vdev, vq - cdev.vqs);
     }
@@ -74,12 +84,16 @@ static void virtio_console__inject_interrupt_callback(struct kvm *kvm, void *par
 }
 
 void virtio_console__inject_interrupt(struct kvm *kvm) {
+    virtio_console__inject_interrupt_vq(kvm, VIRTIO_CONSOLE_RX_QUEUE);
+}
+
+void virtio_console__inject_interrupt_vq(struct kvm *kvm, int vq) {
     // if (kvm->cfg.active_console != CONSOLE_VIRTIO)
     // 	return;
 
     mutex_lock(&cdev.mutex);
     if (cdev.vq_ready) {
-        thread_pool__do_job(&cdev.jobs[VIRTIO_CONSOLE_RX_QUEUE]);
+        thread_pool__do_job(&cdev.jobs[vq]);
     }
 
     mutex_unlock(&cdev.mutex);
@@ -93,6 +107,7 @@ static void virtio_console_handle_callback(struct kvm *kvm, void *param) {
     u32 len;
 
     vq = param;
+    int term = vqToTerm(vq);
 
     /*
      * The current Linux implementation polls for the buffer
@@ -102,9 +117,18 @@ static void virtio_console_handle_callback(struct kvm *kvm, void *param) {
 
     while (virt_queue__available(vq)) {
         head = virt_queue__get_iov(vq, iov, &out, &in, kvm);
-        len = g_term_putc_iov(iov, out, 0);
+        len = g_term_putc_iov(iov, out, term);
         virt_queue__set_used_elem(vq, head, len);
     }
+}
+
+void virtio_console_config__inject_interrupt() {
+    mutex_lock(&cdev.mutex);
+    if (cdev.vq_ready) {
+        thread_pool__do_job(&cdev.jobs[VIRTIO_CONSOLE_RX_QUEUE2]);
+    }
+
+    mutex_unlock(&cdev.mutex);
 }
 
 static void virtio_console_config__inject_interrupt_callback(struct kvm *kvm, void *param) {
@@ -159,16 +183,26 @@ static void virtio_console_config_handle_callback(struct kvm *kvm, void *param) 
             return;
         }
 
+        cpkt.id = ioport__read32(&gcpkt->id);
         cpkt.event = ioport__read16(&gcpkt->event);
         cpkt.value = ioport__read16(&gcpkt->value);
 
-        if (cpkt.event == VIRTIO_CONSOLE_PORT_READY) {
-            struct virtio_console_control cpkt;
-            cpkt.id = 0;
-            cpkt.event = VIRTIO_CONSOLE_CONSOLE_PORT;
-            cpkt.value = 1;
+        if (cpkt.event == VIRTIO_CONSOLE_PORT_READY && cpkt.id != 0) {
+            struct virtio_console_control rcpkt;
+            rcpkt.id = cpkt.id;
+            rcpkt.event = VIRTIO_CONSOLE_CONSOLE_PORT;
+            rcpkt.value = 1;
 
-            put_config_event(cpkt);
+            put_config_event(rcpkt);
+        }
+
+        if (cpkt.event == VIRTIO_CONSOLE_PORT_OPEN && cpkt.id == 0) {
+            struct virtio_console_control rcpkt;
+            rcpkt.id = cpkt.id;
+            rcpkt.event = VIRTIO_CONSOLE_PORT_OPEN;
+            rcpkt.value = cpkt.value;
+
+            put_config_event(rcpkt);
         }
 
 
@@ -202,7 +236,7 @@ static void notify_status(struct kvm *kvm, void *dev, u32 status) {
 
     conf->cols = virtio_host_to_guest_u16(cdev->vdev.endian, 80);
     conf->rows = virtio_host_to_guest_u16(cdev->vdev.endian, 24);
-    conf->max_nr_ports = virtio_host_to_guest_u32(cdev->vdev.endian, 1);
+    conf->max_nr_ports = virtio_host_to_guest_u32(cdev->vdev.endian, 2);
 }
 
 static int init_vq(struct kvm *kvm, void *dev, u32 vq) {
@@ -234,6 +268,13 @@ static int init_vq(struct kvm *kvm, void *dev, u32 vq) {
         cpkt.event = VIRTIO_CONSOLE_PORT_ADD;
         cpkt.value = 1;
         put_config_event(cpkt);
+
+        cpkt.id = 1;
+        put_config_event(cpkt);
+    } else if (vq % 2 == 0) {
+        thread_pool__init_job(&cdev.jobs[vq], kvm, virtio_console__inject_interrupt_callback, queue);
+    } else if (vq % 2 == 1) {
+        thread_pool__init_job(&cdev.jobs[vq], kvm, virtio_console_handle_callback, queue);
     }
 
     return 0;
@@ -317,7 +358,7 @@ int g_term_putc_iov(struct iovec *iov, int iovcnt, int term) {
 
     for (int i = 0; i < iovcnt; i++) {
         if (iov[i].iov_len > 0 && iov[i].iov_base != NULL) {
-            size_t written = g_ringbuffer_write((const char *)iov[i].iov_base, iov[i].iov_len);
+            size_t written = g_ringbuffer_write((const char *)iov[i].iov_base, iov[i].iov_len, term);
             total_written += written;
         }
     }

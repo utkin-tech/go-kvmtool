@@ -2,7 +2,7 @@ package main
 
 /*
 #cgo CFLAGS: -Iinclude -Ix86/include
-#cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_GUEST_PRE_INIT -DCONFIG_X86_64 -DCONFIG_X86
+#cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_X86_64 -DCONFIG_X86
 #cgo CFLAGS: -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE
 #cgo LDFLAGS: -lz
 
@@ -27,26 +27,23 @@ import (
 	_ "github.com/utkin-tech/go-kvmtool/disk"
 	_ "github.com/utkin-tech/go-kvmtool/hw"
 	_ "github.com/utkin-tech/go-kvmtool/net/uip"
+	"github.com/utkin-tech/go-kvmtool/pkg/monitor"
 	"github.com/utkin-tech/go-kvmtool/pkg/server"
 	_ "github.com/utkin-tech/go-kvmtool/util"
 	_ "github.com/utkin-tech/go-kvmtool/vfio"
-	"github.com/utkin-tech/go-kvmtool/virtio"
 	_ "github.com/utkin-tech/go-kvmtool/x86"
 )
 
-const socketPath = "/tmp/example.sock"
+const KernelFilename = "/home/user/go-kvmtool/tmp/bzImage2"
 
 func main() {
-	cfg := ParseConfig()
+	go server.RunServer()
 
-	go server.RunServer(socketPath, virtio.HostToGuest, virtio.GuestToHost)
+	go monitor.RunServer()
 
 	C.set_kvm_dir()
 
-	var kernelFilename *C.char
-	if len(cfg.kernelFilename) > 0 {
-		kernelFilename = C.CString(cfg.kernelFilename)
-	}
+	kernelFilename := C.CString(KernelFilename)
 	defer C.free(unsafe.Pointer(kernelFilename))
 
 	ret := C.handle_kvm_command(kernelFilename)

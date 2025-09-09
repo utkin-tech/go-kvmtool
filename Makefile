@@ -602,5 +602,9 @@ KVMTOOLS-VERSION-FILE:
 	@$(SHELL_PATH) util/KVMTOOLS-VERSION-GEN $(OUTPUT)
 endif
 
-go-build: x86/bios/bios-rom.h x86/bios/bios.bin $(GUEST_INIT) $(GUEST_PRE_INIT)
+guest:
+	CGO_ENABLED=0 go build -o init -ldflags="-s -w"
+	CGO_ENABLED=0 go build -o pre_init -ldflags="-s -w"
+
+go-build: x86/bios/bios-rom.h x86/bios/bios.bin guest
 	go build

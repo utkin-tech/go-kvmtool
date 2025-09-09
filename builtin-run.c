@@ -107,54 +107,6 @@ panic_kvm:
 
 static char kernel[PATH_MAX];
 
-static const char *host_kernels[] = {
-	"/boot/vmlinuz",
-	"/boot/bzImage",
-	NULL
-};
-
-#define BUILD_ARCH "x86"
-
-static const char *default_kernels[] = {
-	"./bzImage",
-	"arch/" BUILD_ARCH "/boot/bzImage",
-	"../../arch/" BUILD_ARCH "/boot/bzImage",
-	NULL
-};
-
-static const char *default_vmlinux[] = {
-	"vmlinux",
-	"../../../vmlinux",
-	"../../vmlinux",
-	NULL
-};
-
-static void kernel_usage_with_options(void)
-{
-	const char **k;
-	struct utsname uts;
-
-	pr_err("Could not find default kernel image in:");
-	k = &default_kernels[0];
-	while (*k) {
-		pr_err("\t%s", *k);
-		k++;
-	}
-
-	if (uname(&uts) < 0)
-		return;
-
-	k = &host_kernels[0];
-	while (*k) {
-		if (snprintf(kernel, PATH_MAX, "%s-%s", *k, uts.release) < 0)
-			return;
-		pr_err("\t%s", kernel);
-		k++;
-	}
-	pr_info("Please see '%s run --help' for more options.",
-		KVM_BINARY_NAME);
-}
-
 static long host_page_size(void)
 {
 	long page_size = sysconf(_SC_PAGE_SIZE);
@@ -206,57 +158,6 @@ static u64 get_ram_size(int nr_cpus)
 		ram_size = available;
 
 	return ram_size;
-}
-
-static const char *find_kernel(void)
-{
-	const char **k;
-	struct stat st;
-	struct utsname uts;
-
-	k = &default_kernels[0];
-	while (*k) {
-		if (stat(*k, &st) < 0 || !S_ISREG(st.st_mode)) {
-			k++;
-			continue;
-		}
-		strlcpy(kernel, *k, PATH_MAX);
-		return kernel;
-	}
-
-	if (uname(&uts) < 0)
-		return NULL;
-
-	k = &host_kernels[0];
-	while (*k) {
-		if (snprintf(kernel, PATH_MAX, "%s-%s", *k, uts.release) < 0)
-			return NULL;
-
-		if (stat(kernel, &st) < 0 || !S_ISREG(st.st_mode)) {
-			k++;
-			continue;
-		}
-		return kernel;
-
-	}
-	return NULL;
-}
-
-static const char *find_vmlinux(void)
-{
-	const char **vmlinux;
-
-	vmlinux = &default_vmlinux[0];
-	while (*vmlinux) {
-		struct stat st;
-
-		if (stat(*vmlinux, &st) < 0 || !S_ISREG(st.st_mode)) {
-			vmlinux++;
-			continue;
-		}
-		return *vmlinux;
-	}
-	return NULL;
 }
 
 static int kvm_run_set_sandbox(struct kvm *kvm)
@@ -466,20 +367,6 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename)
 	kvm->cfg.console = "virtio";
 
 	kvm_run_validate_cfg(kvm);
-
-	if (!kvm->cfg.kernel_filename && !kvm->cfg.firmware_filename) {
-		kvm->cfg.kernel_filename = find_kernel();
-
-		if (!kvm->cfg.kernel_filename) {
-			kernel_usage_with_options();
-			return ERR_PTR(-EINVAL);
-		}
-	}
-
-	if (kvm->cfg.kernel_filename) {
-		kvm->cfg.vmlinux_filename = find_vmlinux();
-		kvm->vmlinux = kvm->cfg.vmlinux_filename;
-	}
 
 	if (kvm->cfg.nrcpus == 0)
 		kvm->cfg.nrcpus = nr_online_cpus;

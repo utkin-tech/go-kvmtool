@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-bool g_ringbuffer_write(const char *, int);
+bool g_ringbuffer_write(const char *, int, int);
 int g_term_getc(int);
 bool g_term_readable(int);
 
