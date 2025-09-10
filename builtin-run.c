@@ -55,23 +55,12 @@
 
 __thread struct kvm_cpu *current_kvm_cpu;
 
-static int  kvm_run_wrapper;
 int loglevel = LOGLEVEL_INFO;
 
 static const char * const run_usage[] = {
 	"lkvm run [<options>] [<kernel image>]",
 	NULL
 };
-
-enum {
-	KVM_RUN_DEFAULT,
-	KVM_RUN_SANDBOX,
-};
-
-void kvm_run_set_wrapper_sandbox(void)
-{
-	kvm_run_wrapper = KVM_RUN_SANDBOX;
-}
 
 static void *kvm_cpu_thread(void *arg)
 {

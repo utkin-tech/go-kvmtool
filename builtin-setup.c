@@ -1,5 +1,4 @@
 #include <kvm/util.h>
-#include <kvm/kvm-cmd.h>
 #include <kvm/builtin-setup.h>
 #include <kvm/kvm.h>
 #include <kvm/parse-options.h>
@@ -17,37 +16,6 @@
 #include <fcntl.h>
 
 static const char *instance_name;
-
-static const char * const setup_usage[] = {
-	"lkvm setup [name]",
-	NULL
-};
-
-static const struct option setup_options[] = {
-	OPT_END()
-};
-
-static void parse_setup_options(int argc, const char **argv)
-{
-	while (argc != 0) {
-		argc = parse_options(argc, argv, setup_options, setup_usage,
-				PARSE_OPT_STOP_AT_NON_OPTION);
-		if (argc != 0 && instance_name)
-			kvm_setup_help();
-		else
-			instance_name = argv[0];
-		argv++;
-		argc--;
-	}
-}
-
-void kvm_setup_help(void)
-{
-	printf("\n%s setup creates a new rootfs under %s.\n"
-		"This can be used later by the '-d' parameter of '%s run'.\n",
-		KVM_BINARY_NAME, kvm__get_dir(), KVM_BINARY_NAME);
-	usage_with_options(setup_usage, setup_options);
-}
 
 static int copy_file(const char *from, const char *to)
 {
@@ -265,10 +233,8 @@ int kvm_cmd_setup(int argc, const char **argv, const char *prefix)
 {
 	int r;
 
-	parse_setup_options(argc, argv);
-
 	if (instance_name == NULL)
-		kvm_setup_help();
+		return 1; // TODO: panic
 
 	r = do_setup(instance_name);
 	if (r == 0) {

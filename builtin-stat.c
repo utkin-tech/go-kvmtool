@@ -1,5 +1,4 @@
 #include <kvm/util.h>
-#include <kvm/kvm-cmd.h>
 #include <kvm/builtin-stat.h>
 #include <kvm/kvm.h>
 #include <kvm/parse-options.h>
@@ -15,35 +14,6 @@
 static bool mem;
 static bool all;
 static const char *instance_name;
-
-static const char * const stat_usage[] = {
-	"lkvm stat [command] [--all] [-n name]",
-	NULL
-};
-
-static const struct option stat_options[] = {
-	OPT_GROUP("Commands options:"),
-	OPT_BOOLEAN('m', "memory", &mem, "Display memory statistics"),
-	OPT_GROUP("Instance options:"),
-	OPT_BOOLEAN('a', "all", &all, "All instances"),
-	OPT_STRING('n', "name", &instance_name, "name", "Instance name"),
-	OPT_END()
-};
-
-static void parse_stat_options(int argc, const char **argv)
-{
-	while (argc != 0) {
-		argc = parse_options(argc, argv, stat_options, stat_usage,
-				PARSE_OPT_STOP_AT_NON_OPTION);
-		if (argc != 0)
-			kvm_stat_help();
-	}
-}
-
-void kvm_stat_help(void)
-{
-	usage_with_options(stat_usage, stat_options);
-}
 
 static int do_memstat(const char *name, int sock)
 {
@@ -117,16 +87,14 @@ int kvm_cmd_stat(int argc, const char **argv, const char *prefix)
 	int instance;
 	int r = 0;
 
-	parse_stat_options(argc, argv);
-
 	if (!mem)
-		usage_with_options(stat_usage, stat_options);
+		return 1; // TODO: panic
 
 	if (mem && all)
 		return kvm__enumerate_instances(do_memstat);
 
 	if (instance_name == NULL)
-		kvm_stat_help();
+		return 1; // TODO: panic
 
 	instance = kvm__get_sock_by_instance(instance_name);
 

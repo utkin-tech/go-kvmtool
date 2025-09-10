@@ -1,5 +1,4 @@
 #include <kvm/util.h>
-#include <kvm/kvm-cmd.h>
 #include <kvm/builtin-list.h>
 #include <kvm/kvm.h>
 #include <kvm/parse-options.h>
@@ -14,26 +13,9 @@
 static bool run;
 static bool rootfs;
 
-static const char * const list_usage[] = {
-	"lkvm list",
-	NULL
-};
-
-static const struct option list_options[] = {
-	OPT_GROUP("General options:"),
-	OPT_BOOLEAN('i', "run", &run, "List running instances"),
-	OPT_BOOLEAN('r', "rootfs", &rootfs, "List rootfs instances"),
-	OPT_END()
-};
-
 #define KVM_INSTANCE_RUNNING	"running"
 #define KVM_INSTANCE_PAUSED	"paused"
 #define KVM_INSTANCE_SHUTOFF	"shut off"
-
-void kvm_list_help(void)
-{
-	usage_with_options(list_usage, list_options);
-}
 
 static pid_t get_pid(int sock)
 {
@@ -111,21 +93,9 @@ static int kvm_list_rootfs(void)
 	return 0;
 }
 
-static void parse_setup_options(int argc, const char **argv)
-{
-	while (argc != 0) {
-		argc = parse_options(argc, argv, list_options, list_usage,
-				PARSE_OPT_STOP_AT_NON_OPTION);
-		if (argc != 0)
-			kvm_list_help();
-	}
-}
-
 int kvm_cmd_list(int argc, const char **argv, const char *prefix)
 {
 	int status, r;
-
-	parse_setup_options(argc, argv);
 
 	if (!run && !rootfs)
 		run = rootfs = true;

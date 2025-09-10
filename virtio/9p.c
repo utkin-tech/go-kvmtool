@@ -1513,49 +1513,6 @@ int virtio_9p_rootdir_parser(const struct option *opt, const char *arg, int unse
 	return 0;
 }
 
-int virtio_9p_img_name_parser(const struct option *opt, const char *arg, int unset)
-{
-	char path[PATH_MAX];
-	struct stat st;
-	struct kvm *kvm = opt->ptr;
-
-	if (stat(arg, &st) == 0 &&
-	    S_ISDIR(st.st_mode)) {
-		char tmp[PATH_MAX];
-
-		if (kvm->cfg.using_rootfs)
-			die("Please use only one rootfs directory atmost");
-
-		if (realpath(arg, tmp) == 0 ||
-		    virtio_9p__register(kvm, tmp, "/dev/root") < 0)
-			die("Unable to initialize virtio 9p");
-		kvm->cfg.using_rootfs = 1;
-		return 0;
-	}
-
-	snprintf(path, PATH_MAX, "%s%s", kvm__get_dir(), arg);
-
-	if (stat(path, &st) == 0 &&
-	    S_ISDIR(st.st_mode)) {
-		char tmp[PATH_MAX];
-
-		if (kvm->cfg.using_rootfs)
-			die("Please use only one rootfs directory atmost");
-
-		if (realpath(path, tmp) == 0 ||
-		    virtio_9p__register(kvm, tmp, "/dev/root") < 0)
-			die("Unable to initialize virtio 9p");
-		if (virtio_9p__register(kvm, "/", "hostfs") < 0)
-			die("Unable to initialize virtio 9p");
-		kvm_setup_resolv(arg);
-		kvm->cfg.using_rootfs = kvm->cfg.custom_rootfs = 1;
-		kvm->cfg.custom_rootfs_name = arg;
-		return 0;
-	}
-
-	return -1;
-}
-
 int virtio_9p__init(struct kvm *kvm)
 {
 	struct p9_dev *p9dev;
