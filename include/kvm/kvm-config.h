@@ -15,7 +15,6 @@
 #define DEFAULT_GUEST_MAC	"02:15:15:15:15:15"
 #define DEFAULT_HOST_MAC	"02:01:01:01:01:01"
 #define DEFAULT_SCRIPT		"none"
-#define DEFAULT_SANDBOX_FILENAME "guest/sandbox.sh"
 
 #define MIN_RAM_SIZE		SZ_64M
 
@@ -35,7 +34,6 @@ struct kvm_config {
 	int nrcpus;
 	const char *kernel_cmdline;
 	const char *kernel_filename;
-	const char *vmlinux_filename;
 	const char *initrd_filename;
 	const char *firmware_filename;
 	const char *flash_filename;
@@ -48,7 +46,6 @@ struct kvm_config {
 	const char *host_mac;
 	const char *script;
 	const char *guest_name;
-	const char *sandbox;
 	const char *hugetlbfs_path;
 	const char *custom_rootfs_name;
 	const char *real_cmdline;

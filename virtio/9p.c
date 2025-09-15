@@ -5,7 +5,6 @@
 #include "kvm/irq.h"
 #include "kvm/virtio-9p.h"
 #include "kvm/guest_compat.h"
-#include "kvm/builtin-setup.h"
 
 #include <stdio.h>
 #include <stdlib.h>

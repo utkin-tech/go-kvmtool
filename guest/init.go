@@ -24,8 +24,6 @@ func runProcess(filename string) error {
 }
 
 func doMounts() {
-	_ = unix.Mount("hostfs", "/host", "9p", unix.MS_RDONLY, "trans=virtio,version=9p2000.L")
-
 	_ = unix.Mount("sysfs", "/sys", "sysfs", 0, "")
 	_ = unix.Mount("proc", "/proc", "proc", 0, "")
 	_ = unix.Mount("devtmpfs", "/dev", "devtmpfs", 0, "")

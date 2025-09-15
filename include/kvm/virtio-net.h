@@ -23,7 +23,6 @@ struct virtio_net_params {
 
 int virtio_net__init(struct kvm *kvm);
 int virtio_net__exit(struct kvm *kvm);
-int netdev_parser(const struct option *opt, const char *arg, int unset);
 
 enum {
 	NET_MODE_USER,

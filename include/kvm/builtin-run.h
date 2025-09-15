@@ -5,6 +5,4 @@
 
 int kvm_cmd_run(const char *kernel_filename);
 
-void kvm_run_set_wrapper_sandbox(void);
-
 #endif
