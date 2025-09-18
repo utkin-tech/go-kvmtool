@@ -23,6 +23,62 @@ func runProcess(filename string) error {
 	return cmd.Run()
 }
 
+func doMounts9p() {
+	newRoot := "/mnt/rootfs"
+	putOld := "old_root"
+
+	if err := os.MkdirAll(newRoot, 0755); err != nil {
+		fmt.Printf("mkdir rootfs: %v", err)
+		return
+	}
+
+	if err := unix.Mount("/dev/root", newRoot, "9p", 0,
+		"trans=virtio,version=9p2000.L,cache=loose"); err != nil {
+		fmt.Printf("mount 9p rootfs: %v", err)
+		return
+	}
+
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+		fmt.Printf("mount MS_PRIVATE: %v", err)
+		return
+	}
+
+	if err := unix.Mount(newRoot, newRoot, "", unix.MS_BIND, ""); err != nil {
+		fmt.Printf("mount MS_BIND on %s: %v", newRoot, err)
+		return
+	}
+
+	putOldPath := newRoot + "/" + putOld
+	if err := os.MkdirAll(putOldPath, 0777); err != nil {
+		fmt.Printf("mkdir %s: %v", putOldPath, err)
+		return
+	}
+
+	if err := os.Chdir(newRoot); err != nil {
+		fmt.Printf("chdir %s: %v", newRoot, err)
+		return
+	}
+
+	if err := unix.PivotRoot(newRoot, putOldPath); err != nil {
+		fmt.Printf("pivot_root %s -> %s: %v", newRoot, putOldPath, err)
+		return
+	}
+
+	if err := os.Chdir("/"); err != nil {
+		fmt.Printf("chdir /: %v", err)
+		return
+	}
+
+	// if err := os.Chdir("/"); err != nil {
+	//     return fmt.Errorf("chdir /: %w", err)
+	// }
+
+	// if err := unix.Unmount("/old_root", unix.MNT_DETACH); err != nil {
+	//     return fmt.Errorf("unmount old_root: %w", err)
+	// }
+	// _ = os.RemoveAll("/old_root")
+}
+
 func doMounts() {
 	_ = unix.Mount("sysfs", "/sys", "sysfs", 0, "")
 	_ = unix.Mount("proc", "/proc", "proc", 0, "")
@@ -31,18 +87,14 @@ func doMounts() {
 	_ = unix.Mount("devpts", "/dev/pts", "devpts", 0, "")
 }
 
-func main() {
-	fmt.Println("Mounting...")
-
-	doMounts()
-
-	f, err := os.OpenFile("/dev/vport1p0", os.O_RDWR, 0600)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
+func doAgent() {
 	go func() {
+		f, err := os.OpenFile("/dev/vport1p0", os.O_RDWR, 0600)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
 		listener, err := mux.NewMuxListener(f)
 		if err != nil {
 			log.Printf("Failed to create mux listener: %v", err)
@@ -62,6 +114,16 @@ func main() {
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()
+}
+
+func main() {
+	fmt.Println("Mounting...")
+
+	doMounts9p()
+
+	doMounts()
+
+	doAgent()
 
 	if _, err := unix.Setsid(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: setsid failed: %v\n", err)

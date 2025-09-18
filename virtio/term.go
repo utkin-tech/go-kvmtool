@@ -5,6 +5,7 @@ package virtio
 */
 import "C"
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/utkin-tech/go-kvmtool/pkg/ringbuffer"
@@ -39,6 +40,7 @@ func init() {
 func g_ringbuffer_write(base unsafe.Pointer, len C.int, term C.int) C.int {
 	buffer := C.GoBytes(base, len)
 	for _, b := range buffer {
+		fmt.Print(string(b))
 		Terminals[term].GuestToHost.Push(b)
 	}
 	return len

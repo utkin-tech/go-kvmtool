@@ -6,6 +6,7 @@
 #include "kvm/util.h"
 #include "kvm/8250-serial.h"
 #include "kvm/virtio-console.h"
+#include "x86_go_exports.h"
 
 #include <asm/bootparam.h>
 #include <linux/kvm.h>
@@ -312,27 +313,26 @@ static bool load_bzimage(struct kvm *kvm, int fd_kernel, int fd_initrd,
 	 * Read initrd image into guest memory
 	 */
 	if (fd_initrd >= 0) {
-		struct stat initrd_stat;
+		size_t initrd_size;
 		unsigned long addr;
 
-		if (fstat(fd_initrd, &initrd_stat))
-			die_perror("fstat");
+		initrd_size = get_initrd_size();
 
 		addr = boot.hdr.initrd_addr_max & ~0xfffff;
 		for (;;) {
 			if (addr < BZ_KERNEL_START)
 				die("Not enough memory for initrd");
-			else if (addr < (kvm->ram_size - initrd_stat.st_size))
+			else if (addr < (kvm->ram_size - initrd_size))
 				break;
 			addr -= 0x100000;
 		}
 
 		p = guest_flat_to_host(kvm, addr);
-		if (read_in_full(fd_initrd, p, initrd_stat.st_size) < 0)
+		if (read_in_full_initrd(p) < 0)
 			die("Failed to read initrd");
 
 		kern_boot->hdr.ramdisk_image	= addr;
-		kern_boot->hdr.ramdisk_size	= initrd_stat.st_size;
+		kern_boot->hdr.ramdisk_size	= initrd_size;
 	}
 
 	kvm->arch.boot_selector = BOOT_LOADER_SELECTOR;

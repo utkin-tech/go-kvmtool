@@ -170,7 +170,7 @@ static void kvm_run_set_real_cmdline(struct kvm *kvm) {
             }
         }
     } else if (!kvm->cfg.kernel_cmdline || !strstr(kvm->cfg.kernel_cmdline, "root=")) {
-        strlcat(real_cmdline, " root=/dev/vda rw ", sizeof(real_cmdline));
+        // strlcat(real_cmdline, " root=/dev/vda rw ", sizeof(real_cmdline));
     }
 
     if (kvm->cfg.kernel_cmdline) {
@@ -230,6 +230,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
 
     kvm->cfg.kernel_filename = kernel_filename;
     kvm->cfg.console = "virtio";
+    kvm->cfg.initrd_filename = "term.c";
 
     kvm_run_validate_cfg(kvm);
 
@@ -292,8 +293,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         }
     }
 
-    if (!kvm->cfg.nodefaults && !kvm->cfg.using_rootfs && !kvm->cfg.disk_image[0].filename &&
-        !kvm->cfg.initrd_filename) {
+    if (true) {
         char tmp[PATH_MAX];
 
         // HERE CHANGE TO RUNC ROOTFS

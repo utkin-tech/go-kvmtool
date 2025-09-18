@@ -1,0 +1,320 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
+)
+
+type Container struct {
+	ID      string               `json:"id"`
+	Status  specs.ContainerState `json:"status"`
+	PID     int                  `json:"pid"`
+	Bundle  string               `json:"bundle"`
+	Created time.Time            `json:"created"`
+}
+
+type Runtime struct {
+	root       string
+	containers map[string]*Container
+}
+
+func NewRuntime(root string) (*Runtime, error) {
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create runtime root: %v", err)
+	}
+
+	return &Runtime{
+		root:       root,
+		containers: make(map[string]*Container),
+	}, nil
+}
+
+func (r *Runtime) loadSpec(bundlePath string) (*specs.Spec, error) {
+	configPath := filepath.Join(bundlePath, "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config.json: %v", err)
+	}
+
+	var spec specs.Spec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return nil, fmt.Errorf("failed to parse config.json: %v", err)
+	}
+
+	return &spec, nil
+}
+
+func (r *Runtime) Create(containerID, bundlePath string) error {
+	if _, exists := r.containers[containerID]; exists {
+		return fmt.Errorf("container %s already exists", containerID)
+	}
+
+	spec, err := r.loadSpec(bundlePath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(spec)
+
+	container := &Container{
+		ID:      containerID,
+		Status:  specs.StateCreated,
+		Bundle:  bundlePath,
+		Created: time.Now(),
+	}
+
+	r.containers[containerID] = container
+	logrus.Infof("Container %s created", containerID)
+	return nil
+}
+
+func (r *Runtime) Start(containerID string) error {
+	container, exists := r.containers[containerID]
+	if !exists {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	if container.Status != specs.StateCreated {
+		return fmt.Errorf("container %s is not in created state", containerID)
+	}
+
+	// Load spec for process configuration
+	spec, err := r.loadSpec(container.Bundle)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(spec)
+
+	container.Status = specs.StateRunning
+
+	logrus.Infof("Container %s started with PID %d", containerID, container.PID)
+
+	// go func() {
+	// 	_, err := process.Wait()
+	// 	if err != nil {
+	// 		logrus.Errorf("Container %s exited with error: %v", containerID, err)
+	// 	} else {
+	// 		logrus.Infof("Container %s exited successfully", containerID)
+	// 	}
+	// 	container.Status = StateStopped
+	// 	container.PID = 0
+	// }()
+
+	return nil
+}
+
+func (r *Runtime) Kill(containerID string, signal string) error {
+	container, exists := r.containers[containerID]
+	if !exists {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	if container.Status != specs.StateRunning {
+		return fmt.Errorf("container %s is not running", containerID)
+	}
+
+	// var sig syscall.Signal
+	// switch strings.ToUpper(signal) {
+	// case "TERM", "SIGTERM":
+	// 	sig = syscall.SIGTERM
+	// case "KILL", "SIGKILL":
+	// 	sig = syscall.SIGKILL
+	// case "INT", "SIGINT":
+	// 	sig = syscall.SIGINT
+	// default:
+	// 	if sigNum, err := strconv.Atoi(signal); err == nil {
+	// 		sig = syscall.Signal(sigNum)
+	// 	} else {
+	// 		return fmt.Errorf("unknown signal: %s", signal)
+	// 	}
+	// }
+
+	logrus.Infof("Signal %s sent to container %s", signal, containerID)
+	return nil
+}
+
+func (r *Runtime) Delete(containerID string) error {
+	container, exists := r.containers[containerID]
+	if !exists {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	if container.Status == specs.StateRunning {
+		return fmt.Errorf("cannot delete running container %s", containerID)
+	}
+
+	delete(r.containers, containerID)
+	logrus.Infof("Container %s deleted", containerID)
+	return nil
+}
+
+func (r *Runtime) State(containerID string) error {
+	container, exists := r.containers[containerID]
+	if !exists {
+		return fmt.Errorf("container %s not found", containerID)
+	}
+
+	state := specs.State{
+		Version: "1.0.0",
+		ID:      container.ID,
+		Status:  container.Status,
+		Pid:     container.PID,
+		Bundle:  container.Bundle,
+	}
+
+	stateJSON, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %v", err)
+	}
+
+	fmt.Println(string(stateJSON))
+	return nil
+}
+
+func (r *Runtime) List() error {
+	if len(r.containers) == 0 {
+		fmt.Println("No containers found")
+		return nil
+	}
+
+	fmt.Printf("%-20s %-10s %-10s %-20s %s\n", "ID", "PID", "STATUS", "CREATED", "BUNDLE")
+	fmt.Println(strings.Repeat("-", 80))
+
+	for _, container := range r.containers {
+		pidStr := "-"
+		if container.PID != 0 {
+			pidStr = strconv.Itoa(container.PID)
+		}
+		created := container.Created.Format("2006-01-02T15:04:05")
+		fmt.Printf("%-20s %-10s %-10s %-20s %s\n",
+			container.ID, pidStr, container.Status, created, container.Bundle)
+	}
+
+	return nil
+}
+
+func main() {
+	logrus.SetLevel(logrus.InfoLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		DisableColors: false,
+		FullTimestamp: true,
+	})
+
+	app := &cli.App{
+		Name:  "gkvm",
+		Usage: "A simple OCI runtime implementation",
+		Commands: []*cli.Command{
+			{
+				Name:      "create",
+				Usage:     "Create a container",
+				ArgsUsage: "<container-id> <bundle-path>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 2 {
+						return fmt.Errorf("create requires container-id and bundle-path")
+					}
+
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.Create(c.Args().Get(0), c.Args().Get(1))
+				},
+			},
+			{
+				Name:      "start",
+				Usage:     "Start a container",
+				ArgsUsage: "<container-id>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 1 {
+						return fmt.Errorf("start requires container-id")
+					}
+
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.Start(c.Args().Get(0))
+				},
+			},
+			{
+				Name:      "kill",
+				Usage:     "Send a signal to a container",
+				ArgsUsage: "<container-id> <signal>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 2 {
+						return fmt.Errorf("kill requires container-id and signal")
+					}
+
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.Kill(c.Args().Get(0), c.Args().Get(1))
+				},
+			},
+			{
+				Name:      "delete",
+				Usage:     "Delete a container",
+				ArgsUsage: "<container-id>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 1 {
+						return fmt.Errorf("delete requires container-id")
+					}
+
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.Delete(c.Args().Get(0))
+				},
+			},
+			{
+				Name:      "state",
+				Usage:     "Show container state",
+				ArgsUsage: "<container-id>",
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 1 {
+						return fmt.Errorf("state requires container-id")
+					}
+
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.State(c.Args().Get(0))
+				},
+			},
+			{
+				Name:  "list",
+				Usage: "List containers",
+				Action: func(c *cli.Context) error {
+					runtime, err := NewRuntime("/run/gkvm")
+					if err != nil {
+						return err
+					}
+
+					return runtime.List()
+				},
+			},
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		logrus.Fatal(err)
+	}
+}
