@@ -18,3 +18,4 @@ KVMTOOLS-VERSION-FILE
 # go-kvmtool
 tmp
 go-kvmtool
+/bin

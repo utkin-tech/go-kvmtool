@@ -168,5 +168,6 @@ tmp/rootfs/virt: tmp/rootfs guest/init
 image: tmp/rootfs/virt
 	@echo "Root filesystem prepared in tmp/rootfs"
 
-go-build: x86/bios/bios-rom.h x86/bios/bios.bin
-	go build
+.PHONY: gkvm
+gkvm: x86/bios/bios-rom.h x86/bios/bios.bin
+	go build -o bin/gkvm ./cmd/gkvm

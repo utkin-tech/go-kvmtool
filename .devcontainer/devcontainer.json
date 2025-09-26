@@ -1,0 +1,11 @@
+{
+	"name": "Go",
+	"image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+	},
+	"runArgs": [
+		"--device=/dev/kvm"
+	],
+	"remoteUser": "root"
+}

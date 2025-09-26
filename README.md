@@ -23,7 +23,13 @@ make go-build
 ## Connect 
 
 ```bash
-socat -,raw,echo=0,escape=0x18 UNIX-CONNECT:/tmp/example.sock
+socat -,raw,echo=0,escape=0x18 UNIX-CONNECT:/tmp/gkvm/term1
 ```
 
 Exit keys `Ctrl + X`
+
+## API
+
+```
+curl -X POST --data '{"id":1}' 127.0.0.1:8080/addPort
+```

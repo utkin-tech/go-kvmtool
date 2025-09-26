@@ -208,6 +208,8 @@ static void kvm_run_validate_cfg(struct kvm *kvm) {
     kvm__arch_validate_cfg(kvm);
 }
 
+extern char* get_rootfs_path();
+
 static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
     static char default_name[20];
     unsigned int nr_online_cpus;
@@ -296,8 +298,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         !kvm->cfg.initrd_filename) {
         char tmp[PATH_MAX];
 
-        // HERE CHANGE TO RUNC ROOTFS
-        snprintf(tmp, PATH_MAX, "/home/user/go-kvmtool/tmp/rootfs");
+        snprintf(tmp, PATH_MAX, get_rootfs_path());
         if (virtio_9p__register(kvm, tmp, "/dev/root") < 0) {
             die("Unable to initialize virtio 9p");
         }

@@ -1,4 +1,4 @@
-package main
+package kvmtool
 
 /*
 #cgo CFLAGS: -Iinclude -Ix86/include
@@ -21,29 +21,42 @@ static void set_kvm_dir() {
 */
 import "C"
 import (
+	"fmt"
 	"os"
 	"unsafe"
 
 	_ "github.com/utkin-tech/go-kvmtool/disk"
 	_ "github.com/utkin-tech/go-kvmtool/hw"
 	_ "github.com/utkin-tech/go-kvmtool/net/uip"
+	"github.com/utkin-tech/go-kvmtool/pkg/config"
 	"github.com/utkin-tech/go-kvmtool/pkg/monitor"
+	"github.com/utkin-tech/go-kvmtool/pkg/ociconfig"
 	"github.com/utkin-tech/go-kvmtool/pkg/server"
 	_ "github.com/utkin-tech/go-kvmtool/util"
 	_ "github.com/utkin-tech/go-kvmtool/vfio"
 	_ "github.com/utkin-tech/go-kvmtool/x86"
 )
 
-const KernelFilename = "/home/user/go-kvmtool/tmp/bzImage2"
+func Run(bundle string) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Printf("failed to load config: %v\n", err)
+		return
+	}
 
-func main() {
+	err = ociconfig.Load(bundle)
+	if err != nil {
+		fmt.Printf("failed to load oci config: %v\n", err)
+		return
+	}
+
 	go server.RunServer()
 
 	go monitor.RunServer()
 
 	C.set_kvm_dir()
 
-	kernelFilename := C.CString(KernelFilename)
+	kernelFilename := C.CString(cfg.Kernel)
 	defer C.free(unsafe.Pointer(kernelFilename))
 
 	ret := C.handle_kvm_command(kernelFilename)
