@@ -28,18 +28,19 @@ var Run = cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) error {
+		root := c.String("root")
 		if c.NArg() < 1 {
 			return fmt.Errorf("container-id is required")
 		}
-		containerID := c.Args().First()
+		containerId := c.Args().First()
 		bundle := c.String("bundle")
 		pidFile := c.String("pid-file")
 		consoleSocket := c.String("console-socket")
 
 		fmt.Printf("run: id=%s bundle=%s pidFile=%s consoleSocket=%s\n",
-			containerID, bundle, pidFile, consoleSocket)
+			containerId, bundle, pidFile, consoleSocket)
 
-		kvmtool.Run(bundle)
+		kvmtool.Run(bundle, root, containerId)
 
 		return nil
 	},

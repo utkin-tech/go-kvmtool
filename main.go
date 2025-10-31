@@ -37,12 +37,13 @@ import (
 	_ "github.com/utkin-tech/go-kvmtool/x86"
 )
 
-func Run(bundle string) {
+func Run(bundle string, root string, containerId string) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		fmt.Printf("failed to load config: %v\n", err)
 		return
 	}
+	fmt.Printf("%v", cfg)
 
 	err = ociconfig.Load(bundle)
 	if err != nil {
@@ -50,7 +51,7 @@ func Run(bundle string) {
 		return
 	}
 
-	go server.RunServer()
+	go server.RunServer(root, containerId)
 
 	go monitor.RunServer()
 

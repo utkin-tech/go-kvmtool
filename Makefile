@@ -171,3 +171,7 @@ image: tmp/rootfs/virt
 .PHONY: gkvm
 gkvm: x86/bios/bios-rom.h x86/bios/bios.bin
 	go build -o bin/gkvm ./cmd/gkvm
+
+.PHONY: shim
+shim:
+	go build -o bin/containerd-shim-gkvm-v1 ./cmd/containerd-shim-gkvm-v1

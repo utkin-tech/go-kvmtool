@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v2"
+	"github.com/utkin-tech/go-kvmtool"
 )
 
 var Create = cli.Command{
@@ -30,13 +31,16 @@ var Create = cli.Command{
 		if c.NArg() < 1 {
 			return fmt.Errorf("container-id is required")
 		}
-		containerID := c.Args().First()
+		root := c.String("root")
+		containerId := c.Args().First()
 		bundle := c.String("bundle")
 		pidFile := c.String("pid-file")
 		consoleSocket := c.String("console-socket")
 
 		fmt.Printf("create: id=%s bundle=%s pidFile=%s consoleSocket=%s\n",
-			containerID, bundle, pidFile, consoleSocket)
+			containerId, bundle, pidFile, consoleSocket)
+
+		kvmtool.Run(bundle, root, containerId)
 		return nil
 	},
 }
