@@ -25,7 +25,20 @@ func Load(bundlePath string) error {
 		return fmt.Errorf("failed to decode config.json: %w", err)
 	}
 
-	RootfsPath = filepath.Join(bundlePath, Spec.Root.Path)
+	// TODO: add relative check
+	// RootfsPath = filepath.Join(bundlePath, Spec.Root.Path)
+	RootfsPath = Spec.Root.Path
 
 	return nil
+}
+
+func HasNamespace(nsType specs.LinuxNamespaceType) bool {
+	result := false
+	for _, ns := range Spec.Linux.Namespaces {
+		if ns.Type == nsType {
+			result = true
+			break
+		}
+	}
+	return result
 }

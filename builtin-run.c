@@ -302,6 +302,10 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         if (virtio_9p__register(kvm, tmp, "/dev/root") < 0) {
             die("Unable to initialize virtio 9p");
         }
+
+        if (virtio_9p__register(kvm, tmp, "/dev/root") < 0) {
+            die("Unable to initialize virtio 9p");
+        }
         kvm->cfg.using_rootfs = kvm->cfg.custom_rootfs = 1;
     }
 

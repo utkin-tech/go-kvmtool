@@ -187,7 +187,9 @@ static void virtio_console_config_handle_callback(struct kvm *kvm, void *param) 
         cpkt.event = ioport__read16(&gcpkt->event);
         cpkt.value = ioport__read16(&gcpkt->value);
 
-        if (cpkt.event == VIRTIO_CONSOLE_PORT_READY && cpkt.id != 0) {
+        printf("id %d, value %d, event %d\n", cpkt.id, cpkt.value, cpkt.event);
+
+        if (cpkt.event == VIRTIO_CONSOLE_PORT_READY && cpkt.id == 1) {
             struct virtio_console_control rcpkt;
             rcpkt.id = cpkt.id;
             rcpkt.event = VIRTIO_CONSOLE_CONSOLE_PORT;
@@ -196,7 +198,7 @@ static void virtio_console_config_handle_callback(struct kvm *kvm, void *param) 
             put_config_event(rcpkt);
         }
 
-        if (cpkt.event == VIRTIO_CONSOLE_PORT_OPEN && cpkt.id == 0) {
+        if (cpkt.event == VIRTIO_CONSOLE_PORT_OPEN && cpkt.id != 1) {
             struct virtio_console_control rcpkt;
             rcpkt.id = cpkt.id;
             rcpkt.event = VIRTIO_CONSOLE_PORT_OPEN;
@@ -236,7 +238,7 @@ static void notify_status(struct kvm *kvm, void *dev, u32 status) {
 
     conf->cols = virtio_host_to_guest_u16(cdev->vdev.endian, 80);
     conf->rows = virtio_host_to_guest_u16(cdev->vdev.endian, 24);
-    conf->max_nr_ports = virtio_host_to_guest_u32(cdev->vdev.endian, 2);
+    conf->max_nr_ports = virtio_host_to_guest_u32(cdev->vdev.endian, 6);
 }
 
 static int init_vq(struct kvm *kvm, void *dev, u32 vq) {

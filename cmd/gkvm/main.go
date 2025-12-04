@@ -44,6 +44,8 @@ func main() {
 			&command.Start,
 			&command.State,
 			&command.Init,
+			&command.Attach,
+			&command.Exec,
 		},
 	}
 

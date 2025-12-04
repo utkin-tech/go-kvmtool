@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Kernel string `yaml:"kernel" env:"GKVM_KERNEL"`
+	Agent  string `yaml:"agent" env:"GKVM_AGENT"`
 }
 
 func LoadConfig() (*Config, error) {

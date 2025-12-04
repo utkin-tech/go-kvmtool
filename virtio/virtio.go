@@ -33,7 +33,7 @@ func put_config_event(event C.struct_virtio_console_control) {
 	configEvents.Push(event)
 }
 
-func AddPort(term uint) {
+func addPort(term uint) {
 	var cpkt C.struct_virtio_console_control
 	cpkt.id = C.__virtio32(term)
 	cpkt.event = C.VIRTIO_CONSOLE_PORT_ADD

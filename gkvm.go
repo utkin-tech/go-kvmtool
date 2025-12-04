@@ -12,6 +12,7 @@ package kvmtool
 #include "kvm/builtin-run.h"
 
 static int handle_kvm_command(const char *kernel_filename) {
+	setvbuf(stdout, NULL, _IONBF, 0);
     return kvm_cmd_run(kernel_filename);
 }
 
@@ -23,19 +24,52 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"unsafe"
 
 	_ "github.com/utkin-tech/go-kvmtool/disk"
 	_ "github.com/utkin-tech/go-kvmtool/hw"
 	_ "github.com/utkin-tech/go-kvmtool/net/uip"
 	"github.com/utkin-tech/go-kvmtool/pkg/config"
-	"github.com/utkin-tech/go-kvmtool/pkg/monitor"
 	"github.com/utkin-tech/go-kvmtool/pkg/ociconfig"
-	"github.com/utkin-tech/go-kvmtool/pkg/server"
+	raphael_server "github.com/utkin-tech/go-kvmtool/pkg/server/raphael"
+	"github.com/utkin-tech/go-kvmtool/pkg/utils"
 	_ "github.com/utkin-tech/go-kvmtool/util"
 	_ "github.com/utkin-tech/go-kvmtool/vfio"
 	_ "github.com/utkin-tech/go-kvmtool/x86"
+	"golang.org/x/sys/unix"
 )
+
+const (
+	virtDir        = "virt"
+	agentFileName  = "init"
+	configFileName = "config.json"
+)
+
+func prepareRootfs(cfg *config.Config, bundle string) error {
+	virtPath := filepath.Join(ociconfig.RootfsPath, virtDir)
+
+	agentFileSource := cfg.Agent
+	agentFileTarget := filepath.Join(virtPath, agentFileName)
+
+	configFileSource := filepath.Join(bundle, configFileName)
+	configFileTarget := filepath.Join(virtPath, configFileName)
+
+	err := os.MkdirAll(virtPath, 0775)
+	if err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	err = unix.Mount("tmpfs", virtPath, "tmpfs", 0, "")
+	if err != nil {
+		return fmt.Errorf("failed to create tmpfs: %w", err)
+	}
+
+	utils.CopyFile(agentFileSource, agentFileTarget)
+	utils.CopyFile(configFileSource, configFileTarget)
+
+	return nil
+}
 
 func Run(bundle string, root string, containerId string) {
 	cfg, err := config.LoadConfig()
@@ -43,7 +77,6 @@ func Run(bundle string, root string, containerId string) {
 		fmt.Printf("failed to load config: %v\n", err)
 		return
 	}
-	fmt.Printf("%v", cfg)
 
 	err = ociconfig.Load(bundle)
 	if err != nil {
@@ -51,9 +84,13 @@ func Run(bundle string, root string, containerId string) {
 		return
 	}
 
-	go server.RunServer(root, containerId)
+	err = prepareRootfs(cfg, bundle)
+	if err != nil {
+		fmt.Printf("failed to prepare rootfs: %v\n", err)
+		return
+	}
 
-	go monitor.RunServer()
+	go raphael_server.RunServer(root, containerId)
 
 	C.set_kvm_dir()
 

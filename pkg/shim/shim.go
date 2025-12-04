@@ -6,13 +6,16 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
+	"runtime/debug"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/api/events"
 	taskAPI "github.com/containerd/containerd/api/runtime/task/v2"
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -20,10 +23,18 @@ import (
 	"github.com/containerd/containerd/pkg/schedcore"
 	"github.com/containerd/containerd/protobuf"
 	ptypes "github.com/containerd/containerd/protobuf/types"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/containerd/sys/reaper"
 	"github.com/containerd/fifo"
+	"github.com/containerd/go-runc"
+	"github.com/containerd/log"
+	"github.com/gorilla/websocket"
+	"github.com/utkin-tech/go-kvmtool/pkg/ociconfig"
+	"github.com/utkin-tech/go-kvmtool/pkg/utils"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -33,7 +44,14 @@ var (
 
 // New returns a new shim service
 func New(ctx context.Context, id string, publisher shim.Publisher, shutdown func()) (shim.Shim, error) {
-	return &service{}, nil
+	s := &service{
+		ec:      reaper.Default.Subscribe(),
+		events:  make(chan interface{}, 128),
+		context: ctx,
+	}
+	go s.processExits(ctx)
+	go s.forward(ctx, publisher)
+	return s, nil
 }
 
 type service struct {
@@ -44,6 +62,13 @@ type service struct {
 	stdin  string
 	stdout string
 	stderr string
+
+	ec chan runc.Exit
+
+	eventSendMu sync.Mutex
+	events      chan interface{}
+
+	context context.Context
 }
 
 func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddress string) (*exec.Cmd, error) {
@@ -74,26 +99,6 @@ func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddre
 }
 
 func (s *service) StartShim(ctx context.Context, opts shim.StartOpts) (_ string, retErr error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
-	pid := os.Getpid()
-	ppid := os.Getppid()
-
-	msg := fmt.Sprintf("StartShim: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
-
 	cmd, err := newCommand(ctx, opts.ID, opts.Address, opts.TTRPCAddress)
 	if err != nil {
 		return "", err
@@ -156,9 +161,6 @@ func (s *service) StartShim(ctx context.Context, opts shim.StartOpts) (_ string,
 		return "", err
 	}
 
-	msg = fmt.Sprintf("StartShim: child PID: %d", cmd.Process.Pid)
-	logger.Info(msg)
-
 	if data, err := io.ReadAll(os.Stdin); err == nil {
 		if len(data) > 0 {
 			var any ptypes.Any
@@ -195,72 +197,52 @@ func (s *service) Cleanup(ctx context.Context) (*taskAPI.DeleteResponse, error) 
 
 // Create a new container
 func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (_ *taskAPI.CreateTaskResponse, err error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("Create: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("Create: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
-	cmd := exec.Command("/bin/bash")
+	bundle := r.Bundle
+	containerId := r.ID
+
+	err = ociconfig.Load(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load oci config: %w", err)
+	}
+
+	cmd := exec.Command("/home/user/go-kvmtool/bin/gkvm", "init", "--bundle", bundle, containerId)
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNET,
 	}
 
+	cmd.Dir = bundle
+
+	logFileName := filepath.Join(bundle, "log.json")
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Stdin = nil
+
 	s.stdin = r.Stdin
 	s.stdout = r.Stdout
 	s.stderr = r.Stderr
-	msg = fmt.Sprintf("Create: stdin: %s, stdout: %s, stderr: %s\n", s.stdin, s.stdout, s.stderr)
-	logger.Info(msg)
-
-	fifoStdin, err := fifo.OpenFifo(ctx, s.stdin, unix.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	fifoStdout, err := fifo.OpenFifo(ctx, s.stdout, unix.O_WRONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	fifoStderr, err := fifo.OpenFifo(ctx, s.stdout, unix.O_WRONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	cmd.Stdin = fifoStdin
-	cmd.Stdout = fifoStdout
-	cmd.Stderr = fifoStderr
+	log.G(ctx).Infof("Create: stdin: %s, stdout: %s, stderr: %s\n", s.stdin, s.stdout, s.stderr)
 
 	err = cmd.Start()
 	if err != nil {
 		fmt.Printf("Error starting process: %v\n", err)
+		fmt.Fprintf(logFile, "Error starting process: %v\n", err)
 		return
 	}
 
 	// Get the PID
 	s.childPid = uint32(cmd.Process.Pid)
-	msg = fmt.Sprintf("Create: Child process PID: %d\n", s.childPid)
-	logger.Info(msg)
-
-	// fifoStdin, err := fifo.OpenFifo(ctx, s.stdin, unix.O_RDONLY, 0)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	log.G(ctx).Infof("Create: Child process PID: %d\n", s.childPid)
 
 	s.id = r.ID
 	s.bundle = r.Bundle
@@ -272,28 +254,73 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (_ *
 
 // Start the primary user process inside the container
 func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.StartResponse, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	pid := os.Getpid()
+	ppid := os.Getppid()
+
+	log.G(ctx).Infof("Start: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
+	log.G(ctx).Infof("Start: Child process PID: %d\n", s.childPid)
+
+	fifoStdin, err := fifo.OpenFifo(ctx, s.stdin, unix.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	fifoStdout, err := fifo.OpenFifo(ctx, s.stdout, unix.O_WRONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	socketPath := utils.SocketPath("/run/gkvm", r.ID)
+	d := utils.UnixWebsocketDialer(socketPath)
+
+	url := "ws://raphael/start"
+	conn, resp, err := d.Dial(url, nil)
+	if err != nil {
+		if resp != nil {
+			log.G(ctx).Errorf("dial failed: %v (http status: %s)", err, resp.Status)
+			return nil, err
+		}
+	}
+
+	go func() {
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if mt == websocket.BinaryMessage || mt == websocket.TextMessage {
+				_, _ = fifoStdout.Write(msg)
+			}
+		}
+	}()
+
+	file, err := os.OpenFile("/tmp/shim-stack.log", os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
+	stack := debug.Stack()
+	file.Write(stack)
 
-	logger := slog.New(handler)
-
-	pid := os.Getpid()
-	ppid := os.Getppid()
-
-	msg := fmt.Sprintf("Start: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
-
-	msg = fmt.Sprintf("Start: Child process PID: %d\n", s.childPid)
-	logger.Info(msg)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := fifoStdin.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.G(ctx).Errorf("stdin read: %v", err)
+				}
+				break
+			}
+			if n > 0 {
+				if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					log.G(ctx).Errorf("ws write error: %v", err)
+					break
+				}
+			}
+		}
+	}()
 
 	return &taskAPI.StartResponse{
 		Pid: s.childPid,
@@ -302,100 +329,40 @@ func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.
 
 // Delete a process or container
 func (s *service) Delete(ctx context.Context, r *taskAPI.DeleteRequest) (*taskAPI.DeleteResponse, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("Delete: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("Delete: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
 	return nil, errdefs.ErrNotImplemented
 }
 
 // Exec an additional process inside the container
 func (s *service) Exec(ctx context.Context, r *taskAPI.ExecProcessRequest) (*ptypes.Empty, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("Exec: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("Exec: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
 	return nil, errdefs.ErrNotImplemented
 }
 
 // ResizePty of a process
 func (s *service) ResizePty(ctx context.Context, r *taskAPI.ResizePtyRequest) (*ptypes.Empty, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("ResizePty: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("ResizePty: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
-	return nil, errdefs.ErrNotImplemented
+	return &emptypb.Empty{}, nil
 }
 
 // State returns runtime state of a process
 func (s *service) State(ctx context.Context, r *taskAPI.StateRequest) (*taskAPI.StateResponse, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("State: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("State: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
 	return &taskAPI.StateResponse{
 		ID:         s.id,
@@ -413,21 +380,29 @@ func (s *service) State(ctx context.Context, r *taskAPI.StateRequest) (*taskAPI.
 
 // Pause the container
 func (s *service) Pause(ctx context.Context, r *taskAPI.PauseRequest) (*ptypes.Empty, error) {
+	log.G(ctx).Info("Pause: ok")
+
 	return nil, errdefs.ErrNotImplemented
 }
 
 // Resume the container
 func (s *service) Resume(ctx context.Context, r *taskAPI.ResumeRequest) (*ptypes.Empty, error) {
+	log.G(ctx).Info("Resume: ok")
+
 	return nil, errdefs.ErrNotImplemented
 }
 
 // Kill a process
 func (s *service) Kill(ctx context.Context, r *taskAPI.KillRequest) (*ptypes.Empty, error) {
-	return nil, errdefs.ErrNotImplemented
+	log.G(ctx).Infof("Kill: %d", r.Signal)
+
+	return &emptypb.Empty{}, nil
 }
 
 // Pids returns all pids inside the container
 func (s *service) Pids(ctx context.Context, r *taskAPI.PidsRequest) (*taskAPI.PidsResponse, error) {
+	log.G(ctx).Info("Pids: ok")
+
 	return &taskAPI.PidsResponse{
 		Processes: []*task.ProcessInfo{
 			{
@@ -439,16 +414,22 @@ func (s *service) Pids(ctx context.Context, r *taskAPI.PidsRequest) (*taskAPI.Pi
 
 // CloseIO of a process
 func (s *service) CloseIO(ctx context.Context, r *taskAPI.CloseIORequest) (*ptypes.Empty, error) {
+	log.G(ctx).Info("CloseIO: ok")
+
 	return nil, errdefs.ErrNotImplemented
 }
 
 // Checkpoint the container
 func (s *service) Checkpoint(ctx context.Context, r *taskAPI.CheckpointTaskRequest) (*ptypes.Empty, error) {
+	log.G(ctx).Info("Checkpoint: ok")
+
 	return nil, errdefs.ErrNotImplemented
 }
 
 // Connect returns shim information of the underlying service
 func (s *service) Connect(ctx context.Context, r *taskAPI.ConnectRequest) (*taskAPI.ConnectResponse, error) {
+	log.G(ctx).Info("Connect: ok")
+
 	return &taskAPI.ConnectResponse{
 		ShimPid: uint32(os.Getpid()),
 		TaskPid: s.childPid,
@@ -457,31 +438,17 @@ func (s *service) Connect(ctx context.Context, r *taskAPI.ConnectRequest) (*task
 
 // Shutdown is called after the underlying resources of the shim are cleaned up and the service can be stopped
 func (s *service) Shutdown(ctx context.Context, r *taskAPI.ShutdownRequest) (*ptypes.Empty, error) {
-	os.Exit(0)
+	log.G(ctx).Info("Shutdown: ok")
+
 	return &ptypes.Empty{}, nil
 }
 
 // Stats returns container level system stats for a container and its processes
 func (s *service) Stats(ctx context.Context, r *taskAPI.StatsRequest) (*taskAPI.StatsResponse, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
 	pid := os.Getpid()
 	ppid := os.Getppid()
 
-	msg := fmt.Sprintf("Stats: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
+	log.G(ctx).Infof("Stats: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
 
 	return nil, errdefs.ErrNotImplemented
 }
@@ -493,25 +460,65 @@ func (s *service) Update(ctx context.Context, r *taskAPI.UpdateTaskRequest) (*pt
 
 // Wait for a process to exit
 func (s *service) Wait(ctx context.Context, r *taskAPI.WaitRequest) (*taskAPI.WaitResponse, error) {
-	// start logger
-	file, err := os.OpenFile("/tmp/gkvm.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})
-
-	logger := slog.New(handler)
-
-	pid := os.Getpid()
-	ppid := os.Getppid()
-
-	msg := fmt.Sprintf("Wait: application stars with args: %v, pid: %d, ppid: %d", os.Args, pid, ppid)
-	logger.Info(msg)
-	// end logger
-
 	return nil, errdefs.ErrNotImplemented
+}
+
+func (s *service) sendL(evt interface{}) {
+	s.eventSendMu.Lock()
+	s.events <- evt
+	s.eventSendMu.Unlock()
+}
+
+func (s *service) processExits(ctx context.Context) {
+	for e := range s.ec {
+		s.checkProcesses(ctx, e)
+	}
+}
+
+func (s *service) checkProcesses(ctx context.Context, e runc.Exit) {
+	log.G(ctx).Infof("checkProcesses: %d: %#v", s.childPid, e)
+
+	if int(s.childPid) == e.Pid {
+		s.sendL(&events.TaskExit{
+			ContainerID: s.id,
+			ID:          s.id,
+			Pid:         uint32(e.Pid),
+			ExitStatus:  uint32(e.Status),
+			ExitedAt:    protobuf.ToTimestamp(time.Now()),
+		})
+		return
+	}
+
+}
+
+func (s *service) forward(ctx context.Context, publisher shim.Publisher) {
+	for e := range s.events {
+		err := publisher.Publish(ctx, getTopic(e), e)
+		if err != nil {
+			// Should not happen.
+			panic(fmt.Errorf("post event: %w", err))
+		}
+	}
+}
+
+func getTopic(e any) string {
+	switch e.(type) {
+	case *events.TaskCreate:
+		return runtime.TaskCreateEventTopic
+	case *events.TaskStart:
+		return runtime.TaskStartEventTopic
+	case *events.TaskOOM:
+		return runtime.TaskOOMEventTopic
+	case *events.TaskExit:
+		return runtime.TaskExitEventTopic
+	case *events.TaskDelete:
+		return runtime.TaskDeleteEventTopic
+	case *events.TaskExecAdded:
+		return runtime.TaskExecAddedEventTopic
+	case *events.TaskExecStarted:
+		return runtime.TaskExecStartedEventTopic
+	default:
+		log.L.Infof("no topic for type %#v", e)
+	}
+	return runtime.TaskUnknownTopic
 }

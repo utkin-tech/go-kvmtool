@@ -13,9 +13,9 @@ import (
 	"golang.org/x/term"
 )
 
-var Attach = cli.Command{
-	Name:      "attach",
-	Usage:     "attach to container",
+var Exec = cli.Command{
+	Name:      "exec",
+	Usage:     "exec to container",
 	ArgsUsage: "<container-id>",
 	Action: func(c *cli.Context) error {
 		if c.NArg() < 1 {
@@ -27,25 +27,22 @@ var Attach = cli.Command{
 		fmt.Printf("create: id=%s, root=%s\n", containerId, root)
 
 		socketPath := utils.SocketPath(root, containerId)
-		attach(socketPath)
+		execFunc(socketPath)
 
 		return nil
 	},
 }
 
-const exitShortcut = 0x1d // Ctrl + ]
-
-func attach(socketPath string) {
+func execFunc(socketPath string) {
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		log.Fatalf("failed to make raw: %v", err)
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
-	defer fmt.Print("\r")
 
 	d := utils.UnixWebsocketDialer(socketPath)
 
-	url := "ws://raphael/attach"
+	url := "ws://raphael/exec"
 	conn, resp, err := d.Dial(url, nil)
 	if err != nil {
 		if resp != nil {
@@ -77,7 +74,7 @@ func attach(socketPath string) {
 			break
 		}
 		if n == 1 && buf[0] == exitShortcut {
-			fmt.Fprintln(os.Stderr, "\r\nExiting client...")
+			fmt.Fprintln(os.Stderr, "\nExiting client...")
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "user exit"))
 			time.Sleep(300 * time.Millisecond)
 			break

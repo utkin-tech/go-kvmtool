@@ -2,10 +2,7 @@ package mux
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"net"
-	"time"
 
 	"github.com/hashicorp/yamux"
 )
@@ -14,16 +11,7 @@ type MuxDialer struct {
 	session *yamux.Session
 }
 
-func NewMuxDialer(conn io.ReadWriteCloser) (*MuxDialer, error) {
-	config := yamux.DefaultConfig()
-	config.EnableKeepAlive = true
-	config.KeepAliveInterval = 30 * time.Second
-
-	session, err := yamux.Client(conn, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create yamux client: %w", err)
-	}
-
+func NewMuxDialer(session *yamux.Session) (*MuxDialer, error) {
 	return &MuxDialer{session: session}, nil
 }
 

@@ -5,6 +5,8 @@ package virtio
 */
 import "C"
 import (
+	"fmt"
+	"log"
 	"unsafe"
 
 	"github.com/utkin-tech/go-kvmtool/pkg/ringbuffer"
@@ -13,23 +15,26 @@ import (
 
 const terminalNum = 2
 
-var Terminals []*terminal.Terminal
+const kernelTerminalId = 1
+
+var Terminals map[uint32]*terminal.Terminal
 
 func HostToGuestFunc(term int) func() {
+	vq := 0
 	if term != 0 {
-		term = (term + 1) << 1
+		vq = (term + 1) << 1
 	}
 
 	return func() {
-		C.virtio_console__inject_interrupt_vq(nil, C.int(term))
+		C.virtio_console__inject_interrupt_vq(nil, C.int(vq))
 	}
 }
 
 func init() {
-	Terminals = make([]*terminal.Terminal, terminalNum)
-	for i := 0; i < terminalNum; i++ {
+	Terminals = make(map[uint32]*terminal.Terminal, terminalNum)
+	for i := uint32(0); i < terminalNum; i++ {
 		Terminals[i] = &terminal.Terminal{
-			HostToGuest: ringbuffer.NewRingBuffer[byte](1<<16, HostToGuestFunc(i)),
+			HostToGuest: ringbuffer.NewRingBuffer[byte](1<<16, HostToGuestFunc(int(i))),
 			GuestToHost: ringbuffer.NewRingBuffer[byte](1<<10, nil),
 		}
 	}
@@ -39,14 +44,19 @@ func init() {
 func g_ringbuffer_write(base unsafe.Pointer, len C.int, term C.int) C.int {
 	buffer := C.GoBytes(base, len)
 	for _, b := range buffer {
-		Terminals[term].GuestToHost.Push(b)
+		// TODO remove debug output and sink it to kernel.log
+		if term == kernelTerminalId {
+			fmt.Print(string(b))
+		}
+		Terminals[uint32(term)].GuestToHost.Push(b)
 	}
 	return len
 }
 
 //export g_term_getc
 func g_term_getc(term C.int) C.int {
-	b, ok := Terminals[term].HostToGuest.TryPop()
+	b, ok := Terminals[uint32(term)].HostToGuest.TryPop()
+	log.Printf("server: g_term_getc %d\n", term)
 	if !ok {
 		return -1
 	}
@@ -55,5 +65,20 @@ func g_term_getc(term C.int) C.int {
 
 //export g_term_readable
 func g_term_readable(term C.int) bool {
-	return !Terminals[term].HostToGuest.IsEmpty()
+	hostToGuest := Terminals[uint32(term)].HostToGuest
+	log.Printf("server: g_term_readable %d: empty: %t\n", term, hostToGuest.IsEmpty())
+	return !hostToGuest.IsEmpty()
+}
+
+func NewTerminal(port uint32) *terminal.Terminal {
+	term := &terminal.Terminal{
+		HostToGuest: ringbuffer.NewRingBuffer[byte](1<<16, HostToGuestFunc(int(port))),
+		GuestToHost: ringbuffer.NewRingBuffer[byte](1<<10, nil),
+	}
+
+	Terminals[port] = term
+
+	addPort(uint(port))
+
+	return term
 }

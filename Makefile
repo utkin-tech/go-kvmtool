@@ -154,19 +154,13 @@ clean:
 	$(Q) rm -rf tmp/rootfs
 .PHONY: clean
 
-guest/init:
+.PHONY: guest
+guest:
 	cd guest && CGO_ENABLED=0 go build -o init -ldflags="-s -w"
 
 tmp/rootfs:
 	mkdir -p tmp/rootfs
 	docker export $$(docker create busybox) | tar -C tmp/rootfs -xvf -
-
-tmp/rootfs/virt: tmp/rootfs guest/init
-	mkdir -p tmp/rootfs/virt
-	cp guest/init tmp/rootfs/virt/
-
-image: tmp/rootfs/virt
-	@echo "Root filesystem prepared in tmp/rootfs"
 
 .PHONY: gkvm
 gkvm: x86/bios/bios-rom.h x86/bios/bios.bin
@@ -175,3 +169,6 @@ gkvm: x86/bios/bios-rom.h x86/bios/bios.bin
 .PHONY: shim
 shim:
 	go build -o bin/containerd-shim-gkvm-v1 ./cmd/containerd-shim-gkvm-v1
+
+.PHONY: all
+all: gkvm shim guest
