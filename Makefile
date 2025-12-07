@@ -154,9 +154,9 @@ clean:
 	$(Q) rm -rf tmp/rootfs
 .PHONY: clean
 
-.PHONY: guest
-guest:
-	cd guest && CGO_ENABLED=0 go build -o init -ldflags="-s -w"
+.PHONY: agent
+agent:
+	CGO_ENABLED=0 go build -o bin/init  -ldflags="-s -w" ./cmd/agent
 
 tmp/rootfs:
 	mkdir -p tmp/rootfs
@@ -171,4 +171,4 @@ shim:
 	go build -o bin/containerd-shim-gkvm-v1 ./cmd/containerd-shim-gkvm-v1
 
 .PHONY: all
-all: gkvm shim guest
+all: gkvm shim agent
