@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/hashicorp/yamux"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
 	"github.com/utkin-tech/go-kvmtool/pkg/api/leonardo"
@@ -127,6 +129,18 @@ func main() {
 			close(leonardoStartSignal)
 
 			select {}
+		})
+		mux.HandleFunc("/net", func(w http.ResponseWriter, r *http.Request) {
+			var req leonardo.NetRequest
+
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				panic(err)
+			}
+
+			addr, _ := netlink.ParseIPNet(req.Addr)
+			gw := net.ParseIP(req.Gw)
+
+			AddNet(addr, gw)
 		})
 
 		server := &http.Server{Handler: mux}

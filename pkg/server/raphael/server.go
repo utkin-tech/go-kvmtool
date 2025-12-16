@@ -27,7 +27,7 @@ import (
 	"github.com/utkin-tech/go-kvmtool/virtio"
 )
 
-var client *http.Client
+var LeonardoClient *http.Client
 
 func RunServer(root string, containerId string) {
 	socketPath := utils.SocketPath(root, containerId)
@@ -55,7 +55,7 @@ func RunServer(root string, containerId string) {
 		DialContext: dialer.DialContext,
 	}
 
-	client = &http.Client{
+	LeonardoClient = &http.Client{
 		Transport: transport,
 		// Timeout:   5 * time.Second,
 	}
@@ -222,7 +222,7 @@ func serveExec(w http.ResponseWriter, r *http.Request) {
 
 	reqBody := bytes.NewBuffer(b)
 
-	resp, err := client.Post("http://leonardo/exec", "application/json; charset=utf-8", reqBody)
+	resp, err := LeonardoClient.Post("http://leonardo/exec", "application/json; charset=utf-8", reqBody)
 
 	if err != nil {
 		log.Printf("HTTP request error: %v", err)
@@ -270,7 +270,7 @@ func serveStart(w http.ResponseWriter, r *http.Request) {
 
 	reqBody := bytes.NewBuffer(b)
 
-	resp, err := client.Post("http://leonardo/start", "application/json; charset=utf-8", reqBody)
+	resp, err := LeonardoClient.Post("http://leonardo/start", "application/json; charset=utf-8", reqBody)
 
 	if err != nil {
 		log.Printf("HTTP request error: %v", err)

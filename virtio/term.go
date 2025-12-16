@@ -6,7 +6,6 @@ package virtio
 import "C"
 import (
 	"fmt"
-	"log"
 	"unsafe"
 
 	"github.com/utkin-tech/go-kvmtool/pkg/ringbuffer"
@@ -56,7 +55,6 @@ func g_ringbuffer_write(base unsafe.Pointer, len C.int, term C.int) C.int {
 //export g_term_getc
 func g_term_getc(term C.int) C.int {
 	b, ok := Terminals[uint32(term)].HostToGuest.TryPop()
-	log.Printf("server: g_term_getc %d\n", term)
 	if !ok {
 		return -1
 	}
@@ -66,7 +64,6 @@ func g_term_getc(term C.int) C.int {
 //export g_term_readable
 func g_term_readable(term C.int) bool {
 	hostToGuest := Terminals[uint32(term)].HostToGuest
-	log.Printf("server: g_term_readable %d: empty: %t\n", term, hostToGuest.IsEmpty())
 	return !hostToGuest.IsEmpty()
 }
 

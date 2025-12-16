@@ -187,7 +187,7 @@ static void virtio_console_config_handle_callback(struct kvm *kvm, void *param) 
         cpkt.event = ioport__read16(&gcpkt->event);
         cpkt.value = ioport__read16(&gcpkt->value);
 
-        printf("id %d, value %d, event %d\n", cpkt.id, cpkt.value, cpkt.event);
+        // printf("id %d, value %d, event %d\n", cpkt.id, cpkt.value, cpkt.event);
 
         if (cpkt.event == VIRTIO_CONSOLE_PORT_READY && cpkt.id == 1) {
             struct virtio_console_control rcpkt;

@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
-	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -218,7 +217,7 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (_ *
 
 	cmd.Dir = bundle
 
-	logFileName := filepath.Join(bundle, "log.json")
+	logFileName := filepath.Join("/tmp", "log.json")
 	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
@@ -293,15 +292,6 @@ func (s *service) Start(ctx context.Context, r *taskAPI.StartRequest) (*taskAPI.
 			}
 		}
 	}()
-
-	file, err := os.OpenFile("/tmp/shim-stack.log", os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	stack := debug.Stack()
-	file.Write(stack)
 
 	go func() {
 		buf := make([]byte, 4096)

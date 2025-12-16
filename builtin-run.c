@@ -165,9 +165,6 @@ static void kvm_run_set_real_cmdline(struct kvm *kvm) {
         strcat(real_cmdline, " rw rootflags=trans=virtio,version=9p2000.L,cache=loose rootfstype=9p");
         if (kvm->cfg.custom_rootfs) {
             strcat(real_cmdline, " init=/virt/init");
-            if (!kvm->cfg.no_dhcp) {
-                strcat(real_cmdline, "  ip=dhcp");
-            }
         }
     } else if (!kvm->cfg.kernel_cmdline || !strstr(kvm->cfg.kernel_cmdline, "root=")) {
         strlcat(real_cmdline, " root=/dev/vda rw ", sizeof(real_cmdline));

@@ -31,6 +31,7 @@ import (
 	_ "github.com/utkin-tech/go-kvmtool/hw"
 	_ "github.com/utkin-tech/go-kvmtool/net/uip"
 	"github.com/utkin-tech/go-kvmtool/pkg/config"
+	gkvm_net "github.com/utkin-tech/go-kvmtool/pkg/net"
 	"github.com/utkin-tech/go-kvmtool/pkg/ociconfig"
 	raphael_server "github.com/utkin-tech/go-kvmtool/pkg/server/raphael"
 	"github.com/utkin-tech/go-kvmtool/pkg/utils"
@@ -96,6 +97,9 @@ func Run(bundle string, root string, containerId string) {
 
 	kernelFilename := C.CString(cfg.Kernel)
 	defer C.free(unsafe.Pointer(kernelFilename))
+
+	gkvm_net.CreateBridge("br0")
+	go gkvm_net.HandleNewInterafaces()
 
 	ret := C.handle_kvm_command(kernelFilename)
 

@@ -845,7 +845,7 @@ int virtio_net__init(struct kvm *kvm)
 			.host_ip	= kvm->cfg.host_ip,
 			.kvm		= kvm,
 			.script		= kvm->cfg.script,
-			.mode		= NET_MODE_USER,
+			.mode		= NET_MODE_TAP,
 		};
 		str_to_mac(kvm->cfg.guest_mac, net_params.guest_mac);
 		str_to_mac(kvm->cfg.host_mac, net_params.host_mac);
