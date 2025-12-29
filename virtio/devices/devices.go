@@ -1,4 +1,4 @@
-package uip
+package devices
 
 /*
 #cgo CFLAGS: -DCONFIG_GUEST_INIT -DCONFIG_X86_64 -DCONFIG_X86

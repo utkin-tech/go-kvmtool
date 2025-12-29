@@ -205,7 +205,9 @@ static void kvm_run_validate_cfg(struct kvm *kvm) {
     kvm__arch_validate_cfg(kvm);
 }
 
-extern char* get_rootfs_path();
+extern char* g_get_rootfs_path();
+extern u64 g_get_ram_size();
+extern int g_get_nrcpus();
 
 static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
     static char default_name[20];
@@ -232,10 +234,12 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
 
     kvm_run_validate_cfg(kvm);
 
+    kvm->cfg.nrcpus = g_get_nrcpus();
     if (kvm->cfg.nrcpus == 0) {
         kvm->cfg.nrcpus = nr_online_cpus;
     }
 
+    kvm->cfg.ram_size = g_get_ram_size();
     if (!kvm->cfg.ram_size) {
         kvm->cfg.ram_size = get_ram_size(kvm->cfg.nrcpus);
     }
@@ -295,7 +299,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         !kvm->cfg.initrd_filename) {
         char tmp[PATH_MAX];
 
-        snprintf(tmp, PATH_MAX, get_rootfs_path());
+        snprintf(tmp, PATH_MAX, g_get_rootfs_path());
         if (virtio_9p__register(kvm, tmp, "/dev/root") < 0) {
             die("Unable to initialize virtio 9p");
         }

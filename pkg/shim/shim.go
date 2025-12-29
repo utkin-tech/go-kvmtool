@@ -212,7 +212,7 @@ func (s *service) Create(ctx context.Context, r *taskAPI.CreateTaskRequest) (_ *
 	cmd := exec.Command("/home/user/go-kvmtool/bin/gkvm", "init", "--bundle", bundle, containerId)
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWNET,
+		Cloneflags: syscall.CLONE_NEWNET | syscall.CLONE_NEWNS,
 	}
 
 	cmd.Dir = bundle

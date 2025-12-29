@@ -10,7 +10,6 @@ import (
 )
 
 var Spec specs.Spec
-var RootfsPath string
 
 func Load(bundlePath string) error {
 	configPath := filepath.Join(bundlePath, "config.json")
@@ -24,10 +23,6 @@ func Load(bundlePath string) error {
 	if err := json.NewDecoder(f).Decode(&Spec); err != nil {
 		return fmt.Errorf("failed to decode config.json: %w", err)
 	}
-
-	// TODO: add relative check
-	// RootfsPath = filepath.Join(bundlePath, Spec.Root.Path)
-	RootfsPath = Spec.Root.Path
 
 	return nil
 }

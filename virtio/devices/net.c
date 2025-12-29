@@ -4,7 +4,6 @@
 #include "kvm/mutex.h"
 #include "kvm/util.h"
 #include "kvm/kvm.h"
-#include "kvm/uip.h"
 #include "kvm/guest_compat.h"
 #include "kvm/iovec.h"
 #include "kvm/strbuf.h"
@@ -61,7 +60,6 @@ struct net_dev {
 
 	int				mode;
 
-	struct uip_info			info;
 	struct net_dev_operations	*ops;
 	struct kvm			*kvm;
 
@@ -445,24 +443,9 @@ static inline int tap_ops_rx(struct iovec *iov, u16 in, struct net_dev *ndev)
 	return readv(ndev->tap_fd, iov, in);
 }
 
-static inline int uip_ops_tx(struct iovec *iov, u16 out, struct net_dev *ndev)
-{
-	return uip_tx(iov, out, &ndev->info);
-}
-
-static inline int uip_ops_rx(struct iovec *iov, u16 in, struct net_dev *ndev)
-{
-	return uip_rx(iov, in, &ndev->info);
-}
-
 static struct net_dev_operations tap_ops = {
 	.rx	= tap_ops_rx,
 	.tx	= tap_ops_tx,
-};
-
-static struct net_dev_operations uip_ops = {
-	.rx	= uip_ops_rx,
-	.tx	= uip_ops_tx,
 };
 
 static u8 *get_config(struct kvm *kvm, void *dev)
@@ -530,8 +513,7 @@ static void virtio_net_start(struct net_dev *ndev)
 								features))
 			die_perror("VHOST_SET_FEATURES failed");
 	} else {
-		ndev->info.vnet_hdr_len = virtio_net_hdr_len(ndev);
-		uip_init(&ndev->info);
+		die_perror("Only TAP device allowed");
 	}
 }
 
@@ -541,7 +523,7 @@ static void virtio_net_stop(struct net_dev *ndev)
 	if (ndev->mode == NET_MODE_TAP)
 		virtio_net__tap_exit(ndev);
 	else
-		uip_exit(&ndev->info);
+		die_perror("Only TAP device allowed");
 }
 
 static void virtio_net_update_endian(struct net_dev *ndev)
@@ -779,8 +761,6 @@ static int virtio_net__init_one(struct virtio_net_params *params)
 
 	for (i = 0 ; i < 6 ; i++) {
 		ndev->config.mac[i]		= params->guest_mac[i];
-		ndev->info.guest_mac.addr[i]	= params->guest_mac[i];
-		ndev->info.host_mac.addr[i]	= params->host_mac[i];
 	}
 
 	ndev->mode = params->mode;
@@ -789,12 +769,7 @@ static int virtio_net__init_one(struct virtio_net_params *params)
 		if (!virtio_net__tap_create(ndev))
 			die_perror("You have requested a TAP device, but creation of one has failed because");
 	} else {
-		ndev->info.host_ip		= ntohl(inet_addr(params->host_ip));
-		ndev->info.guest_ip		= ntohl(inet_addr(params->guest_ip));
-		ndev->info.guest_netmask	= ntohl(inet_addr("255.255.255.0"));
-		ndev->info.buf_nr		= 20,
-		ndev->ops = &uip_ops;
-		uip_static_init(&ndev->info);
+		die_perror("Only TAP device allowed");
 	}
 
 	*ops = net_dev_virtio_ops;
