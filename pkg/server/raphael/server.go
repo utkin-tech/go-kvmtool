@@ -24,7 +24,7 @@ import (
 	donatello_server "github.com/utkin-tech/go-kvmtool/pkg/server/donatello"
 	"github.com/utkin-tech/go-kvmtool/pkg/terminal"
 	"github.com/utkin-tech/go-kvmtool/pkg/utils"
-	"github.com/utkin-tech/go-kvmtool/virtio"
+	"github.com/utkin-tech/go-kvmtool/virtio/devices"
 )
 
 var LeonardoClient *http.Client
@@ -38,7 +38,7 @@ func RunServer(root string, containerId string) {
 		return
 	}
 
-	session, err := yamux.Client(virtio.Terminals[0], nil)
+	session, err := yamux.Client(devices.Ports[0], nil)
 	if err != nil {
 		log.Panicf("failed to create yamux server: %v", err)
 	}
@@ -62,7 +62,7 @@ func RunServer(root string, containerId string) {
 
 	portNum.Store(2)
 
-	term := virtio.Terminals[1]
+	term := devices.Ports[1]
 	go addSocket(socketPath, term)
 	go donatello_server.RunServer(session)
 
@@ -204,7 +204,7 @@ func serveExec(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nextPortNum := portNum.Add(1)
-	term := virtio.NewTerminal(nextPortNum)
+	term := devices.NewPort(nextPortNum)
 
 	go pumpStdout(ws, term.GuestToHost)
 
@@ -253,7 +253,7 @@ func serveStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nextPortNum := portNum.Add(1)
-	term := virtio.NewTerminal(nextPortNum)
+	term := devices.NewPort(nextPortNum)
 
 	go pumpStdout(ws, term.GuestToHost)
 

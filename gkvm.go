@@ -39,6 +39,7 @@ import (
 	"github.com/utkin-tech/go-kvmtool/pkg/utils"
 	_ "github.com/utkin-tech/go-kvmtool/util"
 	_ "github.com/utkin-tech/go-kvmtool/vfio"
+	_ "github.com/utkin-tech/go-kvmtool/virtio"
 	_ "github.com/utkin-tech/go-kvmtool/virtio/devices"
 	_ "github.com/utkin-tech/go-kvmtool/virtio/transports"
 	_ "github.com/utkin-tech/go-kvmtool/x86"

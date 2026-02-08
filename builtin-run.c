@@ -229,8 +229,10 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
      */
     kvm->cfg.ram_addr = kvm__arch_default_ram_address();
 
+    // begin Deprecated
     kvm->cfg.kernel_filename = kernel_filename;
     kvm->cfg.console = "virtio";
+    // end Deprecated
 
     kvm_run_validate_cfg(kvm);
 
@@ -248,6 +250,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         kvm->cfg.dev = DEFAULT_KVM_DEV;
     }
 
+    // begin ParseConsole
     if (!kvm->cfg.console) {
         kvm->cfg.console = DEFAULT_CONSOLE;
     }
@@ -261,7 +264,9 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
     } else {
         pr_warning("No console!");
     }
+    // end ParseConsole
 
+    // begin ParseNetowrk
     if (!kvm->cfg.host_ip) {
         kvm->cfg.host_ip = DEFAULT_HOST_ADDR;
     }
@@ -285,6 +290,7 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
     if (!kvm->cfg.network) {
         kvm->cfg.network = DEFAULT_NETWORK;
     }
+    // end ParseNetowrk
 
     if (!kvm->cfg.guest_name) {
         if (kvm->cfg.custom_rootfs) {
@@ -307,11 +313,15 @@ static struct kvm *kvm_cmd_run_init(const char *kernel_filename) {
         kvm->cfg.using_rootfs = kvm->cfg.custom_rootfs = 1;
     }
 
+    // begin ParseCmdline
     if (kvm->cfg.nodefaults) {
         kvm->cfg.real_cmdline = kvm->cfg.kernel_cmdline;
     } else {
+        // begin SetRealCmdline
         kvm_run_set_real_cmdline(kvm);
+        // end SetRealCmdline
     }
+    // end ParseCmdline
 
     if (kvm->cfg.kernel_filename) {
         pr_info("# %s run -k %s -m %Lu -c %d --name %s", KVM_BINARY_NAME, kvm->cfg.kernel_filename,

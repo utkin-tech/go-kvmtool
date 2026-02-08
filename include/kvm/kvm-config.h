@@ -8,12 +8,12 @@
 #include <linux/sizes.h>
 
 #define DEFAULT_KVM_DEV		"/dev/kvm"
-#define DEFAULT_CONSOLE		"serial"
+#define DEFAULT_CONSOLE		"serial" // May remove
 #define DEFAULT_NETWORK		"user"
-#define DEFAULT_HOST_ADDR	"192.168.33.1"
-#define DEFAULT_GUEST_ADDR	"192.168.33.15"
-#define DEFAULT_GUEST_MAC	"02:15:15:15:15:15"
-#define DEFAULT_HOST_MAC	"02:01:01:01:01:01"
+#define DEFAULT_HOST_ADDR	"192.168.33.1" // May remove
+#define DEFAULT_GUEST_ADDR	"192.168.33.15" // May remove
+#define DEFAULT_GUEST_MAC	"02:15:15:15:15:15" // May remove
+#define DEFAULT_HOST_MAC	"02:01:01:01:01:01" // May remove
 #define DEFAULT_SCRIPT		"none"
 
 #define MIN_RAM_SIZE		SZ_64M
